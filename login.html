@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Sistem Inventory PBD</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <h2>Login ke Sistem</h2>
+            
+            <div id="alert" class="alert" role="alert" style="display: none;"></div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                
+                <button type="submit" id="loginButton" class="btn btn-primary btn-block">
+                    <span id="loginButtonText">Login</span>
+                </button>
+                
+                <a href="index.html" class="btn btn-outline btn-block">Kembali ke Home</a>
+            </form>
+            
+            <div class="demo-credentials">
+                <strong>Login Demo:</strong><br>
+                Username: <code>admin.pusat</code><br>
+                Password: <code>admin123</code>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const alertDiv = document.getElementById('alert');
+            const loginButton = document.getElementById('loginButton');
+            const loginButtonText = document.getElementById('loginButtonText');
+            
+            try {
+                const formData = new FormData();
+                formData.append('action', 'login');
+                formData.append('username', username);
+                formData.append('password', password);
+                
+                // Disable button and show loading state
+                loginButton.disabled = true;
+                loginButtonText.textContent = 'Logging in...';
+
+                const response = await fetch('models/auth.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alertDiv.className = 'alert alert-success';
+                    alertDiv.textContent = result.message;
+                    alertDiv.style.display = 'block';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'views/datamaster.php';
+                    }, 1000);
+                } else {
+                    alertDiv.className = 'alert alert-danger';
+                    alertDiv.textContent = result.message;
+                    alertDiv.style.display = 'block';
+                }
+            } catch (error) {
+                alertDiv.className = 'alert alert-danger';
+                alertDiv.textContent = 'Terjadi kesalahan: ' + error.message;
+                alertDiv.style.display = 'block';
+            } finally {
+                // Re-enable button
+                loginButton.disabled = false;
+                loginButtonText.textContent = 'Login';
+            }
+        });
+    </script>
+</body>
+</html>
