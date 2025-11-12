@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../config/dbconnect.php';
 require_once __DIR__ . '/../models/auth.php';
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 checkAuth(true); // Melindungi API, hanya untuk user yang sudah login
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -38,7 +38,7 @@ function handleGet($dbconn) {
 
     if ($id) {
         // Ambil satu data satuan untuk form edit
-        $stmt = $dbconn->prepare("SELECT idsatuan, nama_satuan, status FROM satuan WHERE idsatuan = ?");
+        $stmt = $dbconn->prepare("SELECT idsatuan, nama_satuan, status FROM view_satuan WHERE idsatuan = ?");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $result = $stmt->get_result()->fetch_assoc();
@@ -46,7 +46,7 @@ function handleGet($dbconn) {
         echo json_encode(['success' => true, 'data' => $result]);
     } else {
         // Ambil semua data satuan untuk tabel
-        $result = $dbconn->query("SELECT idsatuan, nama_satuan, status FROM satuan ORDER BY idsatuan ASC");
+        $result = $dbconn->query("SELECT idsatuan, nama_satuan, status FROM view_satuan ORDER BY idsatuan ASC");
         $data = [];
         while ($row = $result->fetch_assoc()) {
             $row['status_text'] = $row['status'] == 1 ? 'Aktif' : 'Tidak Aktif';

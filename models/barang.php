@@ -3,7 +3,7 @@ require_once __DIR__ . '/../config/dbconnect.php';
 require_once __DIR__ . '/../models/auth.php';
 
 // Set header untuk output JSON
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 // Pastikan user sudah login untuk mengakses data ini
 checkAuth(true); // Tandai sebagai panggilan API
@@ -79,7 +79,10 @@ function handleGet($dbconn) {
         // Ambil semua barang untuk tabel utama
         $filter = $_GET['filter'] ?? 'aktif'; // Default filter adalah 'aktif'
 
-        $sql = "SELECT idbarang, nama, nama_satuan, jenis, harga, status FROM view_barang_details";
+        $sql = "SELECT vbd.idbarang, vbd.nama, vbd.nama_satuan, vbd.jenis, vbd.harga, vbd.status, 
+                       COALESCE((SELECT stok FROM kartu_stok WHERE idbarang = vbd.idbarang ORDER BY created_at DESC, idkartu_stok DESC LIMIT 1), 0) AS stok 
+                FROM view_barang_details vbd";
+
         $params = [];
         $types = '';
 
@@ -90,7 +93,7 @@ function handleGet($dbconn) {
             $types .= 'i';
         }
 
-        $sql .= " ORDER BY idbarang ASC";
+        $sql .= " ORDER BY vbd.idbarang ASC";
 
         $stmt = $dbconn->prepare($sql);
         if (!empty($params)) {
@@ -101,14 +104,28 @@ function handleGet($dbconn) {
 
         $data = [];        
         while ($row = $result->fetch_assoc()) {
+           // Terjemahkan kode jenis barang ke deskripsi lengkap
+           $jenis_desc = $row['jenis']; // Default value
+           switch (strtolower($row['jenis'])) {
+               case 'm':
+                   $jenis_desc = 'Makanan / Minuman (Konsumsi)';
+                   break;
+               case 'p':
+                   $jenis_desc = 'Perawatan Diri / Personal Care';
+                   break;
+               case 'k':
+                   $jenis_desc = 'Kebutuhan Dapur';
+                   break;
+           }
+
            $data[] = [
                 'idbarang' => $row['idbarang'],
                 'kode_barang' => $row['idbarang'],
                 'nama_barang' => $row['nama'],
                 'nama_satuan' => $row['nama_satuan'] ?? '-', // Gunakan null coalescing untuk fallback
-                'jenis_barang' => $row['jenis'],
+                'jenis_barang' => $jenis_desc,
                 'harga_pokok' => $row['harga'],
-                'stok' => 0,  // Placeholder, stok belum ada
+            'stok' => $row['stok'],  
                 'status' => ($row['status'] ?? 0) == 1 ? 'aktif' : 'tidak_aktif'
            ];
         }

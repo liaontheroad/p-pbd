@@ -5,7 +5,7 @@ function handleLogin() {
     global $dbconn;
 
     // Set header to return JSON
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
 
     if (!isset($_POST['username']) || !isset($_POST['password'])) {
         echo json_encode(['success' => false, 'message' => 'Username dan password harus diisi.']);
@@ -60,7 +60,7 @@ function checkAuth($isApi = false) {
         if ($isApi) {
             http_response_code(401); // Unauthorized
             // Pastikan header Content-Type adalah JSON sebelum output
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['success' => false, 'message' => 'Sesi Anda telah berakhir. Silakan login kembali.']);
         } else {
             header('Location: login.html');

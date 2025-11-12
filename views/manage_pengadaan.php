@@ -16,7 +16,11 @@ checkAuth();
         .form-header { border-bottom: 1px solid #2a3142; }
         .form-footer { border-top: 1px solid #2a3142; }
         #item-list-table th, #item-list-table td { padding: 16px 28px; }
-        #item-list-table input { background: #0f1419; border-color: #3a4254; padding: 8px; text-align: right; }
+        #item-list-table input { 
+            background: #0f1419; border-color: #3a4254; 
+            padding: 8px; text-align: right; 
+            color: #e4e6eb; /* Menambahkan warna teks terang */
+        }
         .search-container { position: relative; }
         #search-results {
             position: absolute; top: 100%; left: 0; right: 0; background: #2a3142;
@@ -69,10 +73,9 @@ checkAuth();
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label for="iduser">Dibuat Oleh *</label>
-                                <select id="iduser" name="iduser" required>
-                                    <option value="">Memuat user...</option>
-                                </select>
+                                <label>Dibuat Oleh</label>
+                                <input type="text" id="username" name="username" value="<?php echo htmlspecialchars($_SESSION['username']); ?>" readonly>
+                                <input type="hidden" id="iduser" name="iduser" value="<?php echo htmlspecialchars($_SESSION['user_id']); ?>">
                             </div>
                             <div class="form-group">
                                 <label for="tanggal">Tanggal Pengadaan *</label>
@@ -128,7 +131,6 @@ checkAuth();
             <div class="card">
                 <div class="card-header">
                     <h2>Daftar Pengadaan</h2>
-                    <button id="btnRefresh" class="btn btn-secondary btn-sm">🔄 Refresh</button>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -140,7 +142,6 @@ checkAuth();
                                     <th>Vendor</th>
                                     <th>Dibuat Oleh</th>
                                     <th>Total Nilai</th>
-                                    <th>Aksi</th>
                                 </tr>
                             </thead>
                             <tbody id="tableBody">
@@ -159,17 +160,20 @@ const API_URL = '../models/pengadaan.php';
 document.addEventListener('DOMContentLoaded', () => {
     loadInitialData();
     document.getElementById('tanggal').valueAsDate = new Date();
+
+    // Cek apakah ada parameter 'edit_id' di URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const editId = urlParams.get('edit_id');
+    if (editId) {
+        editPengadaan(editId);
+    }
 });
 
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
 
 async function loadInitialData() {
-    await Promise.all([
-        loadVendors(),
-        loadUsers(),
-        loadBarangDropdown(),
-        loadPengadaanList()
-    ]);
+    loadMasterData();
+    loadPengadaanList();
 }
 
 async function fetchData(params = '') {
@@ -184,30 +188,20 @@ async function fetchData(params = '') {
     }
 }
 
-async function loadVendors() {
-    const result = await fetchData('?action=get_vendors');
+async function loadMasterData() {
+    const result = await fetchData('?list_data=true');
     if (result.success) {
-        const select = document.getElementById('idvendor');
-        select.innerHTML = '<option value="">Pilih Vendor</option>' + 
-            result.data.map(v => `<option value="${v.idvendor}">${v.nama_vendor}</option>`).join('');
-    }
-}
+        // Populate Vendors
+        const vendorSelect = document.getElementById('idvendor');
+        vendorSelect.innerHTML = '<option value="">Pilih Vendor</option>' + 
+            result.vendors.map(v => `<option value="${v.idvendor}">${v.nama_vendor}</option>`).join('');
 
-async function loadUsers() {
-    const result = await fetchData('?action=get_users');
-    if (result.success) {
-        const select = document.getElementById('iduser');
-        select.innerHTML = '<option value="">Pilih User</option>' + 
-            result.data.map(u => `<option value="${u.iduser}">${u.username}</option>`).join('');
-    }
-}
-
-async function loadBarangDropdown() {
-    const result = await fetchData('?action=get_all_barang');
-    if (result.success) {
-        const select = document.getElementById('select-barang');
-        select.innerHTML = '<option value="">Pilih Barang</option>' + 
-            result.data.map(item => `<option value='${JSON.stringify(item)}'>${item.nama} - ${formatRupiah(item.harga)}</option>`).join('');
+        // Populate Barang
+        const barangSelect = document.getElementById('select-barang');
+        barangSelect.innerHTML = '<option value="">Pilih Barang</option>' + 
+            result.barangs.map(item => {
+                return `<option value='${JSON.stringify(item)}'>${item.nama} - ${formatRupiah(item.harga)}</option>`;
+            }).join('');
     }
 }
 
@@ -223,14 +217,10 @@ async function loadPengadaanList() {
                 <td>${po.nama_vendor}</td>
                 <td>${po.username}</td>
                 <td>${formatRupiah(po.total_nilai)}</td>
-                <td class="action-buttons">
-                    <button class="btn btn-primary btn-sm" onclick="editPengadaan('${po.idpengadaan}')">Edit</button>
-                    <button class="btn btn-danger btn-sm" onclick="deletePengadaan('${po.idpengadaan}')">Hapus</button>
-                </td>
             </tr>
         `).join('');
     } else {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Tidak ada data pengadaan.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Tidak ada data pengadaan.</td></tr>';
     }
 }
 
@@ -386,8 +376,6 @@ async function deletePengadaan(id) {
         alert('Error: ' + error.message);
     }
 }
-
-document.getElementById('btnRefresh').addEventListener('click', loadPengadaanList);
 
 </script>
 </body>

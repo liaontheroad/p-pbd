@@ -16,7 +16,11 @@ checkAuth();
         .form-header { border-bottom: 1px solid #2a3142; }
         .form-footer { border-top: 1px solid #2a3142; }
         #item-list-table th, #item-list-table td { padding: 16px 28px; }
-        #item-list-table input { background: #0f1419; border-color: #3a4254; padding: 8px; text-align: right; }
+        #item-list-table input { 
+            background: #0f1419; border-color: #3a4254; 
+            padding: 8px; text-align: right; 
+            color: #e4e6eb; /* Menambahkan warna teks terang */
+        }
         .search-container { position: relative; }
         #search-results {
             position: absolute;
@@ -65,7 +69,14 @@ checkAuth();
         <div class="container">
             <div class="card transaction-form">
                 <form id="formPenerimaan">
+                    <input type="hidden" id="idpengadaan" name="idpengadaan">
                     <!-- Form Header -->
+                    <div class="form-header" style="background: rgba(102, 126, 234, 0.05);">
+                        <div class="form-group">
+                            <label for="select-po">Pilih Pengadaan (Purchase Order) untuk Diterima</label>
+                            <select id="select-po"><option value="">Pilih PO...</option></select>
+                        </div>
+                    </div>
                     <div class="form-header">
                         <div class="form-row">
                             <div class="form-group">
@@ -77,13 +88,6 @@ checkAuth();
                             <div class="form-group">
                                 <label for="tanggal">Tanggal Penerimaan *</label>
                                 <input type="date" id="tanggal" name="tanggal" required>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="search-barang">Cari & Tambah Barang</label>
-                            <div class="search-container">
-                                <input type="text" id="search-barang" placeholder="Ketik nama barang...">
-                                <div id="search-results" style="display: none;"></div>
                             </div>
                         </div>
                     </div>
@@ -119,15 +123,81 @@ checkAuth();
                 </form>
             </div>
         </div>
+         <!-- Area Tampilan Data -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Daftar Penerimaan</h2>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="tablePenerimaan">
+                            <thead>
+                                <tr>
+                                    <th>ID Penerimaan</th>
+                                    <th>ID Pengadaan</th>
+                                    <th>ID User</th>
+                                    <th>Status</th>
+                                    <th>Created At</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <tr><td colspan="5" style="text-align: center;">Memuat data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     loadVendors();
+    loadOpenPOs();
+    loadPenerimaan(); // Panggil fungsi untuk memuat tabel penerimaan
     document.getElementById('tanggal').valueAsDate = new Date();
+
+    document.getElementById('select-po').addEventListener('change', handlePOSelection);
 });
 
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
+
+async function loadPenerimaan() {
+    try {
+        const response = await fetch('../models/penerimaan.php?action=get_penerimaan');
+        const result = await response.json();
+        const tbody = document.getElementById('tableBody');
+
+        if (result.success && result.data.length > 0) {
+            tbody.innerHTML = result.data.map(p => {
+                // Mapping untuk status agar lebih mudah dibaca
+                const statusMap = {
+                    'P': { text: 'Pending', class: 'badge-warning' },
+                    'C': { text: 'Cicilan', class: 'badge-info' },
+                    'F': { text: 'Final', class: 'badge-success' }
+                };
+                const statusInfo = statusMap[p.status] || { text: p.status, class: 'badge-secondary' };
+                const tanggal = new Date(p.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+
+                return `
+                    <tr>
+                        <td>${p.idpenerimaan}</td>
+                        <td>PO-${p.idpengadaan}</td>
+                        <td>${p.iduser}</td>
+                        <td><span class="badge ${statusInfo.class}">${statusInfo.text}</span></td>
+                        <td>${tanggal}</td>
+                    </tr>
+                `;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Belum ada data penerimaan.</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading penerimaan:', error);
+        document.getElementById('tableBody').innerHTML = '<tr><td colspan="5" style="text-align: center;">Gagal memuat data.</td></tr>';
+    }
+}
 
 async function loadVendors() {
     try {
@@ -143,71 +213,88 @@ async function loadVendors() {
     }
 }
 
-const searchInput = document.getElementById('search-barang');
-const searchResults = document.getElementById('search-results');
+async function loadOpenPOs() {
+    try {
+        const response = await fetch('../models/penerimaan.php?action=get_open_pos');
+        const result = await response.json();
+        if (result.success) {
+            const select = document.getElementById('select-po');
+            select.innerHTML = '<option value="">Pilih PO...</option>' + 
+                result.data.map(po => {
+                    const tanggal = new Date(po.timestamp).toLocaleDateString('id-ID');
+                    return `<option value="${po.idpengadaan}">PO-${po.idpengadaan} - ${po.nama_vendor} (${tanggal})</option>`;
+                }).join('');
+        }
+    } catch (error) {
+        console.error('Error loading open POs:', error);
+    }
+}
 
-searchInput.addEventListener('keyup', async (e) => {
-    const term = e.target.value;
-    if (term.length < 2) {
-        searchResults.style.display = 'none';
+async function handlePOSelection(e) {
+    const idpengadaan = e.target.value;
+    const itemListBody = document.getElementById('item-list-body');
+    const vendorSelect = document.getElementById('idvendor');
+    
+    // Reset form jika tidak ada PO yang dipilih
+    if (!idpengadaan) {
+        vendorSelect.value = '';
+        vendorSelect.disabled = false; // Aktifkan kembali dropdown vendor
+        document.getElementById('idpengadaan').value = ''; // Reset hidden input
+        itemListBody.innerHTML = '';
+        updateTotals();
         return;
     }
 
     try {
-        const response = await fetch(`../models/penerimaan.php?action=search_barang&term=${term}`);
+        const response = await fetch(`../models/penerimaan.php?action=get_po_details&id=${idpengadaan}`);
         const result = await response.json();
+
         if (result.success && result.data.length > 0) {
-            searchResults.innerHTML = result.data.map(item => `
-                <div class="search-item" onclick='addItem(${JSON.stringify(item)})'>
-                    <strong>${item.nama}</strong><br>
-                    <small>Harga Pokok: ${formatRupiah(item.harga)}</small>
-                </div>
-            `).join('');
-            searchResults.style.display = 'block';
+            // Set vendor dari PO yang dipilih
+            vendorSelect.value = result.data[0].vendor_idvendor;
+            vendorSelect.disabled = true; // Non-aktifkan dropdown vendor
+            document.getElementById('idpengadaan').value = idpengadaan; // Simpan ID PO di hidden input
+            
+            // Kosongkan daftar item sebelum mengisi yang baru
+            itemListBody.innerHTML = '';
+
+            // Tambahkan setiap item dari PO ke tabel
+            result.data.forEach(item => {
+                // Menggunakan data dari PO untuk harga dan jumlah
+                addItemFromPO(item);
+            });
+            updateTotals();
         } else {
-            searchResults.style.display = 'none';
+            alert('Gagal memuat detail PO atau PO tidak memiliki item.');
         }
     } catch (error) {
-        console.error('Error searching barang:', error);
+        console.error('Error fetching PO details:', error);
+        alert('Terjadi kesalahan saat mengambil detail PO.');
     }
-});
+}
 
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.search-container')) {
-        searchResults.style.display = 'none';
-    }
-});
-
-function addItem(item) {
+function addItemFromPO(item) {
     const itemListBody = document.getElementById('item-list-body');
-    
-    // Cek jika item sudah ada di list
-    if (document.querySelector(`tr[data-idbarang="${item.idbarang}"]`)) {
-        alert('Barang sudah ada di dalam daftar.');
-        return;
-    }
+    if (document.querySelector(`tr[data-idbarang="${item.idbarang}"]`)) return; // Hindari duplikat
 
     const row = document.createElement('tr');
     row.setAttribute('data-idbarang', item.idbarang);
+    const subtotal = item.jumlah * item.harga_satuan;
     row.innerHTML = `
         <td>${item.nama}</td>
-        <td><input type="number" class="item-qty" value="1" min="1" onchange="updateTotals()"></td>
-        <td><input type="number" class="item-price" value="${item.harga}" onchange="updateTotals()"></td>
-        <td class="item-subtotal">${formatRupiah(item.harga)}</td>
-        <td><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); updateTotals();">X</button></td>
+        <td><input type="number" class="item-qty" value="${item.jumlah}" min="0" max="${item.jumlah}" onchange="updateTotals()" title="Jumlah di PO: ${item.jumlah}"></td>
+        <td class="item-price" data-price="${item.harga_satuan}">${formatRupiah(item.harga_satuan)}</td>
+        <td class="item-subtotal">${formatRupiah(subtotal)}</td>
+        <td><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); updateTotals();" title="Hapus item dari daftar penerimaan">X</button></td>
     `;
     itemListBody.appendChild(row);
-    
-    searchInput.value = '';
-    searchResults.style.display = 'none';
-    updateTotals();
 }
 
 function updateTotals() {
     let grandTotal = 0;
     document.querySelectorAll('#item-list-body tr').forEach(row => {
         const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
-        const price = parseFloat(row.querySelector('.item-price').value) || 0;
+        const price = parseFloat(row.querySelector('.item-price').dataset.price) || 0;
         const subtotal = qty * price;
         grandTotal += subtotal;
         row.querySelector('.item-subtotal').textContent = formatRupiah(subtotal);
@@ -220,13 +307,14 @@ document.getElementById('formPenerimaan').addEventListener('submit', async (e) =
 
     const idvendor = document.getElementById('idvendor').value;
     const tanggal = document.getElementById('tanggal').value;
+    const idpengadaan = document.getElementById('idpengadaan').value; // Ambil ID PO dari hidden input
     const items = [];
 
     document.querySelectorAll('#item-list-body tr').forEach(row => {
         items.push({
             idbarang: row.dataset.idbarang,
             jumlah: parseFloat(row.querySelector('.item-qty').value),
-            harga: parseFloat(row.querySelector('.item-price').value)
+            harga: parseFloat(row.querySelector('.item-price').dataset.price)
         });
     });
 
@@ -235,7 +323,7 @@ document.getElementById('formPenerimaan').addEventListener('submit', async (e) =
         return;
     }
 
-    const payload = { idvendor, tanggal, items };
+    const payload = { idvendor, tanggal, items, idpengadaan: idpengadaan };
 
     try {
         const response = await fetch('../models/penerimaan.php', {
@@ -251,8 +339,10 @@ document.getElementById('formPenerimaan').addEventListener('submit', async (e) =
             // Reset form
             document.getElementById('formPenerimaan').reset();
             document.getElementById('tanggal').valueAsDate = new Date();
+            loadOpenPOs(); // Muat ulang daftar PO
             document.getElementById('item-list-body').innerHTML = '';
             updateTotals();
+            loadPenerimaan(); // Muat ulang tabel penerimaan setelah berhasil menyimpan
         }
     } catch (error) {
         alert('Terjadi kesalahan: ' + error.message);

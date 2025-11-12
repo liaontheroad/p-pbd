@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../config/dbconnect.php';
 require_once __DIR__ . '/../models/auth.php';
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 checkAuth(true); // Melindungi API
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -51,8 +51,7 @@ function handleGet($dbconn) {
     } else {
         // Ambil semua user dengan nama role-nya
         $sql = "SELECT u.iduser, u.username, r.nama_role 
-                FROM user u 
-                LEFT JOIN role r ON u.idrole = r.idrole 
+                FROM view_user_role 
                 ORDER BY u.iduser ASC";
         $result = $dbconn->query($sql);
         $data = $result->fetch_all(MYSQLI_ASSOC);

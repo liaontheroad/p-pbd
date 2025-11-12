@@ -90,16 +90,24 @@ checkAuth();
         <div class="container">
             <h2 class="page-title">Menu Utama</h2>
             
-            <h3 style="color: #8b92a7; font-weight: 600; margin-top: 40px; margin-bottom: -10px;">Transaksi</h3>
+            <h3 style="color: #8b92a7; font-weight: 600; margin-top: 40px; margin-bottom: -10px;">Menu Transaksi</h3>
             <div class="datamaster-grid">
-                <a href="penerimaan.php" class="dm-card"> <!-- Pastikan link ini benar -->
+                <a href="manage_pengadaan.php" class="dm-card">
+                    <div class="dm-card-header"><span class="dm-card-icon">📝</span><h3 class="dm-card-title">Pengadaan (PO)</h3></div>
+                    <p class="dm-card-description">Buat pesanan pembelian (Purchase Order) ke vendor.</p>
+                </a>
+                <a href="manage_penerimaan.php" class="dm-card">
                     <div class="dm-card-header"><span class="dm-card-icon">📥</span><h3 class="dm-card-title">Penerimaan Barang</h3></div>
                     <p class="dm-card-description">Catat barang yang masuk dari vendor untuk menambah stok.</p>
                 </a>
-                <a href="penjualan.php" class="dm-card">
+                <a href="manage_penjualan.php" class="dm-card">
                     <div class="dm-card-header"><span class="dm-card-icon">📤</span><h3 class="dm-card-title">Penjualan Barang</h3></div>
                     <p class="dm-card-description">Catat transaksi penjualan barang ke pelanggan dan kurangi stok.</p>
                 </a>
+            </div>
+
+            <h3 style="color: #8b92a7; font-weight: 600; margin-top: 40px; margin-bottom: -10px;">Menu Data Master</h3>
+            <div class="datamaster-grid">
                  <a href="manage_barang.php" class="dm-card">
                     <div class="dm-card-header"><span class="dm-card-icon">📦</span><h3 class="dm-card-title">Manajemen Barang</h3></div>
                     <p class="dm-card-description">Lihat, tambah, edit, dan hapus data barang. Filter barang berdasarkan status aktif.</p>
@@ -109,21 +117,20 @@ checkAuth();
                     <p class="dm-card-description">Kelola satuan unit untuk barang (e.g., Pcs, Box, Kg). Filter satuan aktif.</p>
                 </a>
                 <a href="manage_users.php" class="dm-card">
-                    <div class="dm-card-header"><span class="dm-card-icon">👥</span><h3 class="dm-card-title">Manajemen User & Role</h3></div>
-                    <p class="dm-card-description">Atur pengguna sistem dan hak akses (role) mereka.</p>
+                    <div class="dm-card-header"><span class="dm-card-icon">👥</span><h3 class="dm-card-title">Manajemen User</h3></div>
+                    <p class="dm-card-description">Atur pengguna sistem dan tetapkan hak akses untuk setiap user.</p>
+                </a>
+                <a href="manage_roles.php" class="dm-card">
+                    <div class="dm-card-header"><span class="dm-card-icon">🛡️</span><h3 class="dm-card-title">Manajemen Role</h3></div>
+                    <p class="dm-card-description">Kelola jenis hak akses atau role yang tersedia dalam sistem.</p>
                 </a>
                 <a href="manage_vendor.php" class="dm-card">
                     <div class="dm-card-header"><span class="dm-card-icon">🚚</span><h3 class="dm-card-title">Manajemen Vendor</h3></div>
                     <p class="dm-card-description">Kelola data pemasok atau vendor. Filter vendor berdasarkan status aktif.</p>
                 </a>
-            </div>
-
-            <h3 style="color: #8b92a7; font-weight: 600; margin-top: 40px; margin-bottom: -10px;">Lainnya</h3>
-            <div class="datamaster-grid">
-                <!-- Tombol-tombol navigasi -->
-                <a href="pengadaan.php" class="dm-card">
-                    <div class="dm-card-header"><span class="dm-card-icon">📝</span><h3 class="dm-card-title">Pengadaan (PO)</h3></div>
-                    <p class="dm-card-description">Buat pesanan pembelian (Purchase Order) ke vendor.</p>
+                <a href="manage_margin.php" class="dm-card">
+                    <div class="dm-card-header"><span class="dm-card-icon">📈</span><h3 class="dm-card-title">Manajemen Margin</h3></div>
+                    <p class="dm-card-description">Atur persentase margin keuntungan untuk penjualan barang.</p>
                 </a>
             </div>
         </div>

@@ -67,6 +67,7 @@ checkAuth();
                     <h2>Daftar Barang</h2>
                     <div style="display: flex; gap: 1rem; align-items: center;">
                         <button id="btnFilterAktif" class="btn btn-secondary btn-sm" data-filter="semua">Tampilkan Aktif Saja</button>
+                        <button id="btnRefresh" class="btn btn-secondary btn-sm">🔄 Refresh</button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -132,7 +133,12 @@ checkAuth();
                     </div>
                     <div class="form-group">
                         <label for="jenis_barang">Jenis Barang</label>
-                        <input type="text" id="jenis_barang" name="jenis_barang">
+                        <select id="jenis_barang" name="jenis_barang">
+                            <option value="">Pilih Jenis</option>
+                            <option value="m">Makanan / Minuman (Konsumsi)</option>
+                            <option value="p">Perawatan Diri / Personal Care</option>
+                            <option value="k">Kebutuhan Dapur</option>
+                        </select>
                     </div>
                 </div>
                 
