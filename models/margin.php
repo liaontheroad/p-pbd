@@ -55,49 +55,69 @@ function handleGet($dbconn) {
         }
     } else {
         // Ambil semua data margin dari view untuk tabel (sudah benar)
-        $sql = "SELECT idmargin_penjualan, persen, status, created_at, updated_at, username FROM view_margin_user ORDER BY created_at DESC";
-        $result = $dbconn->query($sql);
-        $data = $result->fetch_all(MYSQLI_ASSOC);
-        echo json_encode(['success' => true, 'data' => $data]);
+        try {
+            $sql = "SELECT idmargin_penjualan, persen, status, created_at, updated_at, username FROM view_margin_user ORDER BY created_at DESC";
+            $result = $dbconn->query($sql);
+            $data = $result->fetch_all(MYSQLI_ASSOC);
+            echo json_encode(['success' => true, 'data' => $data]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Gagal mengambil daftar margin: ' . $e->getMessage()]);
+        }
     }
 }
 
 function handlePost($dbconn) {
-    $persen = $_POST['persen'];
-    $status = ($_POST['status'] === 'aktif') ? 1 : 0;
-     $iduser = $_SESSION['user_id'];
+    $input = json_decode(file_get_contents('php://input'), true);
 
-    // Jika status baru adalah 'aktif', nonaktifkan semua margin lain
-     if ($status == 1) {
-        $dbconn->query("UPDATE margin_penjualan SET status = 0");
-    }
+    $persen = $input['persen'] ?? null;
+    $status_text = $input['status'] ?? 'tidak_aktif';
+    $status = ($status_text === 'aktif') ? 1 : 0;
+    $iduser = $_SESSION['user_id'];
 
-    // Since idmargin_penjualan is not AUTO_INCREMENT, we must generate it manually.
-    // Find the current max ID and add 1. Use COALESCE to handle the first entry.
-    $result = $dbconn->query("SELECT COALESCE(MAX(idmargin_penjualan), 0) + 1 AS next_id FROM margin_penjualan");
-    $next_id = $result->fetch_assoc()['next_id'];
-
-    $stmt = $dbconn->prepare("INSERT INTO margin_penjualan (idmargin_penjualan, persen, status, iduser, created_at) VALUES (?, ?, ?, ?, NOW())");
-    if (!$stmt) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Gagal mempersiapkan statement: ' . $dbconn->error]);
+    if (!is_numeric($persen)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Data tidak valid: Persentase margin harus berupa angka.']);
         return;
     }
-    $stmt->bind_param("idii", $next_id, $persen, $status, $iduser);
 
-    if ($stmt->execute()) {
+    $dbconn->begin_transaction();
+    try {
+        // Jika status baru adalah 'aktif', nonaktifkan semua margin lain
+        if ($status == 1) {
+            if ($dbconn->query("UPDATE margin_penjualan SET status = 0") === false) {
+                throw new Exception("Gagal menonaktifkan margin yang ada: " . $dbconn->error);
+            }
+        }
+
+        // Since idmargin_penjualan is not AUTO_INCREMENT, we must generate it manually.
+        // Find the current max ID and add 1. Use COALESCE to handle the first entry.
+        $result = $dbconn->query("SELECT COALESCE(MAX(idmargin_penjualan), 0) + 1 AS next_id FROM margin_penjualan");
+        if (!$result) throw new Exception("Gagal mengambil ID margin berikutnya: " . $dbconn->error);
+        $next_id = $result->fetch_assoc()['next_id'];
+
+        $stmt = $dbconn->prepare("INSERT INTO margin_penjualan (idmargin_penjualan, persen, status, iduser, created_at) VALUES (?, ?, ?, ?, NOW())");
+        if (!$stmt) {
+            throw new Exception('Gagal mempersiapkan statement: ' . $dbconn->error);
+        }
+        $stmt->bind_param("idii", $next_id, $persen, $status, $iduser);
+        if ($stmt->execute() === false) throw new Exception("Gagal mengeksekusi statement: " . $stmt->error);
+
+        $dbconn->commit();
         echo json_encode(['success' => true, 'message' => 'Margin berhasil ditambahkan.']);
-    } else {
+    } catch (Exception $e) {
+        $dbconn->rollback();
         http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Gagal menambahkan margin: ' . $stmt->error]);
+        echo json_encode(['success' => false, 'message' => 'Gagal menambahkan margin: ' . $e->getMessage()]);
     }
 }
 
 function handlePut($dbconn) {
-    // Data dari FormData ada di $_POST
-    $idmargin = $_POST['idmargin_penjualan'] ?? null;
-    $persen = $_POST['persen'] ?? null;
-    $status_text = $_POST['status'] ?? 'tidak_aktif';
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    $idmargin = $input['idmargin_penjualan'] ?? null;
+    $persen = $input['persen'] ?? null;
+    $status_text = $input['status'] ?? 'tidak_aktif';
     $status = ($status_text === 'aktif') ? 1 : 0;
     $iduser = $_SESSION['user_id'];
 
@@ -108,27 +128,34 @@ function handlePut($dbconn) {
         return;
     }
 
-    // Jika status baru adalah 'aktif', nonaktifkan semua margin lain
-    if ($status == 1) {
-        $stmt_deactivate = $dbconn->prepare("UPDATE margin_penjualan SET status = 0 WHERE idmargin_penjualan != ?");
-        $stmt_deactivate->bind_param("i", $idmargin);
-        $stmt_deactivate->execute();
-    }
+    $dbconn->begin_transaction();
+    try {
+        // Jika status baru adalah 'aktif', nonaktifkan semua margin lain
+        if ($status == 1) {
+            $stmt_deactivate = $dbconn->prepare("UPDATE margin_penjualan SET status = 0 WHERE idmargin_penjualan != ?");
+            if (!$stmt_deactivate) throw new Exception("Gagal mempersiapkan statement penonaktifan: " . $dbconn->error);
+            $stmt_deactivate->bind_param("i", $idmargin);
+            if ($stmt_deactivate->execute() === false) throw new Exception("Gagal mengeksekusi penonaktifan: " . $stmt_deactivate->error);
+        }
 
-    $stmt = $dbconn->prepare("UPDATE margin_penjualan SET persen = ?, status = ?, iduser = ?, updated_at = NOW() WHERE idmargin_penjualan = ?");
-    $stmt->bind_param("diii", $persen, $status, $iduser, $idmargin); // iduser diperbarui saat edit
+        $stmt = $dbconn->prepare("UPDATE margin_penjualan SET persen = ?, status = ?, iduser = ?, updated_at = NOW() WHERE idmargin_penjualan = ?");
+        if (!$stmt) throw new Exception("Gagal mempersiapkan statement pembaruan: " . $dbconn->error);
+        $stmt->bind_param("diii", $persen, $status, $iduser, $idmargin); // iduser diperbarui saat edit
+        if ($stmt->execute() === false) throw new Exception("Gagal mengeksekusi pembaruan: " . $stmt->error);
 
-    if ($stmt->execute()) {
+        $dbconn->commit();
         echo json_encode(['success' => true, 'message' => 'Margin berhasil diperbarui.']);
-    } else {
+    } catch (Exception $e) {
+        $dbconn->rollback();
         http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Gagal memperbarui margin: ' . $stmt->error]);
+        echo json_encode(['success' => false, 'message' => 'Gagal memperbarui margin: ' . $e->getMessage()]);
     }
 }
 
 function handleDelete($dbconn) {
-    // Frontend mengirim FormData, jadi data ada di $_POST
-    $idmargin = $_POST['idmargin_penjualan'] ?? null;
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    $idmargin = $input['idmargin_penjualan'] ?? null;
 
     if (empty($idmargin)) {
         http_response_code(400);
@@ -136,20 +163,24 @@ function handleDelete($dbconn) {
         return;
     }
 
-    // Menggunakan soft delete (mengubah status menjadi tidak aktif)
-    $stmt = $dbconn->prepare("UPDATE margin_penjualan SET status = 0, updated_at = NOW() WHERE idmargin_penjualan = ?");
-    $stmt->bind_param("i", $idmargin);
+    try {
+        // Menggunakan soft delete (mengubah status menjadi tidak aktif)
+        $stmt = $dbconn->prepare("UPDATE margin_penjualan SET status = 0, updated_at = NOW() WHERE idmargin_penjualan = ?");
+        if (!$stmt) {
+            throw new Exception("Gagal mempersiapkan statement: " . $dbconn->error);
+        }
+        $stmt->bind_param("i", $idmargin);
+        $stmt->execute();
 
-    if ($stmt->execute()) {
         if ($stmt->affected_rows > 0) {
             echo json_encode(['success' => true, 'message' => 'Margin berhasil dinonaktifkan.']);
         } else {
             http_response_code(404);
             echo json_encode(['success' => false, 'message' => 'Margin tidak ditemukan.']);
         }
-    } else {
+    } catch (Exception $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Gagal menonaktifkan margin: ' . $stmt->error]);
+        echo json_encode(['success' => false, 'message' => 'Gagal menonaktifkan margin: ' . $e->getMessage()]);
     }
 }
 ?>

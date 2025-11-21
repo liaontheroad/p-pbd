@@ -27,24 +27,60 @@ $dbconn->close();
 // ...
 function handleGet($dbconn) {
     $action = $_GET['action'] ?? null;
+    
+    if ($action === 'list_margins') {
+        try {
+            // Ambil semua margin, yang aktif akan dipilih secara default di frontend
+            $margin_result = $dbconn->query("SELECT idmargin_penjualan, persen, status FROM margin_penjualan ORDER BY status DESC, persen ASC");
+            $margins = $margin_result->fetch_all(MYSQLI_ASSOC);
+            echo json_encode(['success' => true, 'data' => $margins]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Gagal mengambil daftar margin: ' . $e->getMessage()]);
+        }
+        return;
+    }
 
-    if ($action === 'search_barang') {
-        // ...
-        // This line calls the function you just created for every item in the search result.
-        $stmt = $dbconn->prepare(
-            "SELECT idbarang, nama, stok, hitung_harga_jual_dengan_margin(idbarang) as harga_jual 
-             FROM barang 
-             WHERE status = 1 AND stok > 0 AND nama LIKE ? 
-             LIMIT 10"
-        );
-
-        $searchTerm = "%" . $term . "%";
-        $stmt->bind_param("s", $searchTerm);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $data = $result->fetch_all(MYSQLI_ASSOC);
-        echo json_encode(['success' => true, 'data' => $data]);
-    } else {
+    if ($action === 'list_barang') {
+        try {
+            // Modifikasi: Ambil harga dasar (harga pokok) dari tabel barang.
+            // Harga jual akan dihitung di frontend.
+            $barang_result = $dbconn->query(
+                "SELECT idbarang, nama, stok_terakhir(idbarang) as stok, harga 
+                 FROM barang
+                 WHERE status = 1 AND stok_terakhir(idbarang) > 0"
+            );
+            $barangs = $barang_result->fetch_all(MYSQLI_ASSOC);
+            echo json_encode(['success' => true, 'data' => $barangs]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Gagal mengambil daftar barang: ' . $e->getMessage()]);
+        }
+        return; // Hentikan eksekusi setelah ini
+    }
+    if ($action === 'list_penjualan') {
+        try {
+            // Query untuk mengambil daftar penjualan beserta detailnya
+            $sql = "SELECT 
+                        p.idpenjualan, 
+                        p.created_at, 
+                        u.username, 
+                        mp.persen AS margin_persen,
+                        (SELECT SUM(dp.subtotal) FROM detail_penjualan dp WHERE dp.penjualan_idpenjualan = p.idpenjualan) AS total_nilai
+                    FROM penjualan p
+                    JOIN user u ON p.iduser = u.iduser
+                    JOIN margin_penjualan mp ON p.idmargin_penjualan = mp.idmargin_penjualan
+                    ORDER BY p.created_at DESC";
+            $result = $dbconn->query($sql);
+            $penjualan_list = $result->fetch_all(MYSQLI_ASSOC);
+            echo json_encode(['success' => true, 'data' => $penjualan_list]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Gagal mengambil daftar penjualan: ' . $e->getMessage()]);
+        }
+        return;
+    }
+    else {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Aksi tidak valid.']);
     }
@@ -55,11 +91,12 @@ function handlePost($dbconn) {
 
     $tanggal = $input['tanggal'] ?? null;
     $items = $input['items'] ?? [];
+    $idmargin = $input['idmargin'] ?? null; // Ambil idmargin dari frontend
     $iduser = $_SESSION['user_id'];
 
-    if (empty($tanggal) || empty($items)) {
+    if (empty($tanggal) || empty($items) || empty($idmargin)) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Data tidak lengkap: Tanggal dan minimal satu barang harus diisi.']);
+        echo json_encode(['success' => false, 'message' => 'Data tidak lengkap: Tanggal, Margin, dan minimal satu barang harus diisi.']);
         return;
     }
 
@@ -67,24 +104,25 @@ function handlePost($dbconn) {
     $dbconn->begin_transaction();
 
     try {
-        // 1. Hitung total harga dari semua item di sisi PHP
-        $total_harga = 0;
+        // Calculate totals before inserting the header
+        $subtotal_nilai = 0;
         foreach ($items as $item) {
-            $total_harga += ($item['jumlah'] * $item['harga_jual']);
+            $subtotal_nilai += ($item['harga_jual'] * $item['jumlah']);
         }
+        
+        // Assuming PPN is 0 for now as it's not in the form.
+        $ppn = 0; 
+        $total_nilai = $subtotal_nilai + $ppn;
 
-        // 2. Buat header transaksi penjualan dengan total harga yang sudah dihitung
-        $stmt_penjualan = $dbconn->prepare("INSERT INTO penjualan (tanggal, iduser, total) VALUES (?, ?, ?)");
-        $stmt_penjualan->bind_param("sid", $tanggal, $iduser, $total_harga);
+        // 2. Create the sales transaction header, including the active margin ID
+        // FIX: Add subtotal_nilai, ppn, and total_nilai to the insert query
+        $stmt_penjualan = $dbconn->prepare("INSERT INTO penjualan (created_at, iduser, idmargin_penjualan, subtotal_nilai, ppn, total_nilai) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt_penjualan->bind_param("siiddd", $tanggal, $iduser, $idmargin, $subtotal_nilai, $ppn, $total_nilai);
         $stmt_penjualan->execute();
-        $idpenjualan = $dbconn->insert_id; // Ambil ID penjualan yang baru dibuat
+        $idpenjualan = $dbconn->insert_id;
 
-        if (!$idpenjualan) {
-            throw new Exception("Gagal membuat header transaksi penjualan.");
-        }
-
-        // 3. Loop setiap item dan masukkan ke tabel detail_penjualan
-        // Ini lebih efisien daripada memanggil Stored Procedure berulang kali dalam loop.
+        // 3. Loop through each item and insert it into the detail_penjualan table
+        // FIX: Reverting column name from 'jumlah_terima' back to 'jumlah' as per the new error.
         $stmt_detail = $dbconn->prepare("INSERT INTO detail_penjualan (penjualan_idpenjualan, idbarang, harga_satuan, jumlah, subtotal) VALUES (?, ?, ?, ?, ?)");
         $stmt_kartu_stok = $dbconn->prepare("CALL proses_penjualan_transaksi(?, ?, ?)");
 
@@ -94,8 +132,8 @@ function handlePost($dbconn) {
             $harga_jual = $item['harga_jual'];
             $subtotal = $jumlah * $harga_jual;
 
-            // Panggil SP untuk mengurangi stok dan mencatat ke kartu stok
-            // proses_penjualan_transaksi(IN p_idpenjualan INT, IN p_idbarang INT, IN p_jumlah INT)
+            // Call the Stored Procedure to reduce stock and record it in the stock card.
+            // SP: proses_penjualan_transaksi(IN p_idpenjualan INT, IN p_idbarang INT, IN p_jumlah INT)
             $stmt_kartu_stok->bind_param("iii", $idpenjualan, $idbarang, $jumlah);
             $stmt_kartu_stok->execute();
 
@@ -103,7 +141,7 @@ function handlePost($dbconn) {
             $stmt_detail->execute();
         }
 
-        // Commit transaksi jika berhasil
+        // Commit the transaction if successful
         $dbconn->commit();
         echo json_encode(['success' => true, 'message' => 'Transaksi penjualan berhasil disimpan.']);
 

@@ -492,6 +492,35 @@ BEGIN
 END $$
 DELIMITER ;
 
+-- Fungsi untuk menghitung harga jual berdasarkan margin aktif
+DROP FUNCTION IF EXISTS hitung_harga_jual_dengan_margin;
+DELIMITER $$
+CREATE FUNCTION hitung_harga_jual_dengan_margin(p_idbarang INT)
+RETURNS DECIMAL(15, 2)
+READS SQL DATA
+BEGIN
+    DECLARE v_harga_pokok DECIMAL(15, 2);
+    DECLARE v_margin_persen DOUBLE;
+    DECLARE v_harga_jual DECIMAL(15, 2);
+
+    -- 1. Ambil harga pokok barang
+    SELECT harga INTO v_harga_pokok FROM barang WHERE idbarang = p_idbarang;
+
+    -- 2. Ambil persentase margin yang sedang aktif
+    SELECT persen INTO v_margin_persen FROM margin_penjualan WHERE status = 1 ORDER BY created_at DESC LIMIT 1;
+
+    -- Jika tidak ada margin aktif, kembalikan harga pokok
+    IF v_margin_persen IS NULL THEN
+        RETURN v_harga_pokok;
+    END IF;
+
+    -- 3. Hitung harga jual
+    SET v_harga_jual = v_harga_pokok * (1 + (v_margin_persen / 100));
+
+    RETURN v_harga_jual;
+END $$
+DELIMITER ;
+
 SELECT * FROM kartu_stok ORDER BY created_at DESC LIMIT 10;
 
 
@@ -516,4 +545,3 @@ select * from barang
 sELECT * FROM detail_penerimaan ORDER BY idpenerimaan DESC LIMIT 5;
 
 SHOW CREATE PROCEDURE proses_penerimaan_transaksi;
-

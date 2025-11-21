@@ -69,6 +69,8 @@ checkAuth();
         <div class="container">
             <div class="card transaction-form">
                 <form id="formPenerimaan">
+                    <input type="hidden" id="idpenerimaan_edit" name="idpenerimaan">
+                    <input type="hidden" id="formMethod" name="_method">
                     <input type="hidden" id="idpengadaan" name="idpengadaan">
                     <!-- Form Header -->
                     <div class="form-header" style="background: rgba(102, 126, 234, 0.05);">
@@ -80,10 +82,8 @@ checkAuth();
                     <div class="form-header">
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="idvendor">Vendor *</label>
-                                <select id="idvendor" name="idvendor" required>
-                                    <option value="">Memuat vendor...</option>
-                                </select>
+                                <label for="nama_vendor">Vendor *</label>
+                                <input type="text" id="nama_vendor" name="nama_vendor" readonly required placeholder="Pilih PO untuk menampilkan vendor">
                             </div>
                             <div class="form-group">
                                 <label for="tanggal">Tanggal Penerimaan *</label>
@@ -101,7 +101,6 @@ checkAuth();
                                     <th width="15%">Jumlah</th>
                                     <th width="20%">Harga Beli</th>
                                     <th width="20%">Subtotal</th>
-                                    <th width="5%">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody id="item-list-body">
@@ -117,7 +116,8 @@ checkAuth();
                             <span id="grand-total">Rp 0</span>
                         </div>
                         <div class="form-footer" style="padding: 28px 0 0 0; border-top: none;">
-                            <button type="submit" class="btn btn-primary">Simpan Transaksi Penerimaan</button>
+                            <button type="button" class="btn btn-secondary" onclick="resetForm()">Batal</button>
+                            <button type="submit" class="btn btn-primary">Simpan Penerimaan</button>
                         </div>
                     </div>
                 </form>
@@ -137,11 +137,12 @@ checkAuth();
                                     <th>ID Pengadaan</th>
                                     <th>ID User</th>
                                     <th>Status</th>
+                                    <th>Aksi</th>
                                     <th>Created At</th>
                                 </tr>
                             </thead>
                             <tbody id="tableBody">
-                                <tr><td colspan="5" style="text-align: center;">Memuat data...</td></tr>
+                                <tr><td colspan="6" style="text-align: center;">Memuat data...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -152,8 +153,9 @@ checkAuth();
     </div>
 
 <script>
+const API_URL = '../models/penerimaan.php';
+
 document.addEventListener('DOMContentLoaded', () => {
-    loadVendors();
     loadOpenPOs();
     loadPenerimaan(); // Panggil fungsi untuk memuat tabel penerimaan
     document.getElementById('tanggal').valueAsDate = new Date();
@@ -165,7 +167,7 @@ const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'curren
 
 async function loadPenerimaan() {
     try {
-        const response = await fetch('../models/penerimaan.php?action=get_penerimaan');
+        const response = await fetch(`${API_URL}?action=get_penerimaan`);
         const result = await response.json();
         const tbody = document.getElementById('tableBody');
 
@@ -186,44 +188,37 @@ async function loadPenerimaan() {
                         <td>PO-${p.idpengadaan}</td>
                         <td>${p.iduser}</td>
                         <td><span class="badge ${statusInfo.class}">${statusInfo.text}</span></td>
+                        <td class="action-buttons">
+                            <button class="btn btn-primary btn-sm" onclick="editPenerimaan('${p.idpenerimaan}')">Edit</button>
+                        </td>
                         <td>${tanggal}</td>
                     </tr>
                 `;
             }).join('');
         } else {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Belum ada data penerimaan.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Belum ada data penerimaan.</td></tr>';
         }
     } catch (error) {
         console.error('Error loading penerimaan:', error);
-        document.getElementById('tableBody').innerHTML = '<tr><td colspan="5" style="text-align: center;">Gagal memuat data.</td></tr>';
-    }
-}
-
-async function loadVendors() {
-    try {
-        const response = await fetch('../models/penerimaan.php?action=get_vendors');
-        const result = await response.json();
-        if (result.success) {
-            const select = document.getElementById('idvendor');
-            select.innerHTML = '<option value="">Pilih Vendor</option>' + 
-                result.data.map(vendor => `<option value="${vendor.idvendor}">${vendor.nama_vendor}</option>`).join('');
-        }
-    } catch (error) {
-        console.error('Error loading vendors:', error);
+        document.getElementById('tableBody').innerHTML = '<tr><td colspan="6" style="text-align: center;">Gagal memuat data.</td></tr>';
     }
 }
 
 async function loadOpenPOs() {
     try {
-        const response = await fetch('../models/penerimaan.php?action=get_open_pos');
+        const response = await fetch(`${API_URL}?action=get_open_pos`);
         const result = await response.json();
         if (result.success) {
             const select = document.getElementById('select-po');
+            const currentVal = select.value; // Simpan nilai saat ini jika ada
             select.innerHTML = '<option value="">Pilih PO...</option>' + 
                 result.data.map(po => {
                     const tanggal = new Date(po.timestamp).toLocaleDateString('id-ID');
                     return `<option value="${po.idpengadaan}">PO-${po.idpengadaan} - ${po.nama_vendor} (${tanggal})</option>`;
                 }).join('');
+            if (document.getElementById('formMethod').value === 'PUT') {
+                select.value = currentVal; // Set kembali nilainya jika sedang mode edit
+            }
         }
     } catch (error) {
         console.error('Error loading open POs:', error);
@@ -233,12 +228,12 @@ async function loadOpenPOs() {
 async function handlePOSelection(e) {
     const idpengadaan = e.target.value;
     const itemListBody = document.getElementById('item-list-body');
-    const vendorSelect = document.getElementById('idvendor');
+    const vendorInput = document.getElementById('nama_vendor');
     
     // Reset form jika tidak ada PO yang dipilih
     if (!idpengadaan) {
-        vendorSelect.value = '';
-        vendorSelect.disabled = false; // Aktifkan kembali dropdown vendor
+        vendorInput.value = '';
+        vendorInput.placeholder = 'Pilih PO untuk menampilkan vendor';
         document.getElementById('idpengadaan').value = ''; // Reset hidden input
         itemListBody.innerHTML = '';
         updateTotals();
@@ -246,13 +241,13 @@ async function handlePOSelection(e) {
     }
 
     try {
-        const response = await fetch(`../models/penerimaan.php?action=get_po_details&id=${idpengadaan}`);
+        const response = await fetch(`${API_URL}?action=get_po_details&id=${idpengadaan}`);
         const result = await response.json();
 
         if (result.success && result.data.length > 0) {
             // Set vendor dari PO yang dipilih
-            vendorSelect.value = result.data[0].vendor_idvendor;
-            vendorSelect.disabled = true; // Non-aktifkan dropdown vendor
+            const selectedPOText = e.target.options[e.target.selectedIndex].text;
+            vendorInput.value = selectedPOText.split(' - ')[1].split(' (')[0]; // Ekstrak nama vendor dari teks option
             document.getElementById('idpengadaan').value = idpengadaan; // Simpan ID PO di hidden input
             
             // Kosongkan daftar item sebelum mengisi yang baru
@@ -273,19 +268,70 @@ async function handlePOSelection(e) {
     }
 }
 
+async function editPenerimaan(idpenerimaan) {
+    try {
+        const response = await fetch(`${API_URL}?action=get_penerimaan_details&id=${idpenerimaan}`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+            resetForm(); // Bersihkan form sebelum diisi
+            const data = result.data;
+            const itemListBody = document.getElementById('item-list-body');
+            const vendorInput = document.getElementById('nama_vendor');
+            const poSelect = document.getElementById('select-po');
+
+            // Isi form dengan data yang ada
+            document.getElementById('idpengadaan').value = data.header.idpengadaan;
+            document.getElementById('idpenerimaan_edit').value = idpenerimaan;
+            document.getElementById('formMethod').value = 'PUT';
+            document.getElementById('tanggal').value = data.header.created_at.split(' ')[0];
+            document.querySelector('#formPenerimaan button[type="submit"]').textContent = 'Perbarui Penerimaan';
+
+            // Tampilkan PO yang sedang diedit dan nonaktifkan pilihan
+            poSelect.innerHTML = `<option value="${data.header.idpengadaan}">PO-${data.header.idpengadaan} (Editing)</option>`;
+            poSelect.value = data.header.idpengadaan;
+            poSelect.disabled = true;
+
+            // Isi nama vendor
+            vendorInput.value = data.header.nama_vendor;
+
+            // Isi daftar barang
+            itemListBody.innerHTML = '';
+            data.details.forEach(item => {
+                // Gunakan nama_barang jika ada (dari edit), jika tidak, gunakan nama (dari pilih PO baru)
+                const itemData = {
+                    idbarang: item.idbarang,
+                    nama: item.nama_barang,
+                    jumlah: item.jumlah,
+                    harga_satuan: item.harga_satuan
+                };
+                addItemFromPO(itemData);
+            });
+
+            updateTotals();
+            window.scrollTo(0, 0); // Scroll ke atas untuk fokus ke form
+        } else {
+            alert('Gagal memuat data penerimaan untuk diedit.');
+        }
+    } catch (error) {
+        console.error('Error fetching penerimaan details for edit:', error);
+        alert('Terjadi kesalahan saat mengambil detail penerimaan.');
+    }
+}
+
 function addItemFromPO(item) {
     const itemListBody = document.getElementById('item-list-body');
     if (document.querySelector(`tr[data-idbarang="${item.idbarang}"]`)) return; // Hindari duplikat
 
     const row = document.createElement('tr');
     row.setAttribute('data-idbarang', item.idbarang);
+    const namaBarang = item.nama_barang || item.nama;
     const subtotal = item.jumlah * item.harga_satuan;
     row.innerHTML = `
-        <td>${item.nama}</td>
+        <td>${namaBarang}</td>
         <td><input type="number" class="item-qty" value="${item.jumlah}" min="0" max="${item.jumlah}" onchange="updateTotals()" title="Jumlah di PO: ${item.jumlah}"></td>
         <td class="item-price" data-price="${item.harga_satuan}">${formatRupiah(item.harga_satuan)}</td>
         <td class="item-subtotal">${formatRupiah(subtotal)}</td>
-        <td><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); updateTotals();" title="Hapus item dari daftar penerimaan">X</button></td>
     `;
     itemListBody.appendChild(row);
 }
@@ -302,12 +348,26 @@ function updateTotals() {
     document.getElementById('grand-total').textContent = formatRupiah(grandTotal);
 }
 
+function resetForm() {
+    document.getElementById('formPenerimaan').reset();
+    document.getElementById('idpengadaan').value = '';
+    document.getElementById('idpenerimaan_edit').value = '';
+    document.getElementById('formMethod').value = '';
+    document.getElementById('tanggal').valueAsDate = new Date();
+    document.getElementById('item-list-body').innerHTML = '';
+    document.getElementById('select-po').disabled = false;
+    document.getElementById('nama_vendor').value = '';
+    document.querySelector('#formPenerimaan button[type="submit"]').textContent = 'Simpan Penerimaan';
+    updateTotals();
+    loadOpenPOs(); // Muat ulang PO yang terbuka
+}
+
 document.getElementById('formPenerimaan').addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const idvendor = document.getElementById('idvendor').value;
     const tanggal = document.getElementById('tanggal').value;
     const idpengadaan = document.getElementById('idpengadaan').value; // Ambil ID PO dari hidden input
+    const idpenerimaan = document.getElementById('idpenerimaan_edit').value;
     const items = [];
 
     document.querySelectorAll('#item-list-body tr').forEach(row => {
@@ -318,30 +378,26 @@ document.getElementById('formPenerimaan').addEventListener('submit', async (e) =
         });
     });
 
-    if (!idvendor || !tanggal || items.length === 0) {
-        alert('Mohon lengkapi vendor, tanggal, dan tambahkan minimal satu barang.');
+    if (!idpengadaan || !tanggal || items.length === 0) {
+        alert('Mohon pilih PO, lengkapi tanggal, dan pastikan ada barang yang diterima.');
         return;
     }
 
-    const payload = { idvendor, tanggal, items, idpengadaan: idpengadaan };
+    const method = document.getElementById('formMethod').value || 'POST';
+    const payload = { idpenerimaan, idpengadaan, tanggal, items };
 
     try {
-        const response = await fetch('../models/penerimaan.php', {
+        const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ ...payload, _method: method })
         });
 
         const result = await response.json();
         alert(result.message);
 
         if (result.success) {
-            // Reset form
-            document.getElementById('formPenerimaan').reset();
-            document.getElementById('tanggal').valueAsDate = new Date();
-            loadOpenPOs(); // Muat ulang daftar PO
-            document.getElementById('item-list-body').innerHTML = '';
-            updateTotals();
+            resetForm();
             loadPenerimaan(); // Muat ulang tabel penerimaan setelah berhasil menyimpan
         }
     } catch (error) {

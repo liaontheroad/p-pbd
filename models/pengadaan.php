@@ -54,9 +54,9 @@ switch ($method) {
         $dbconn->begin_transaction();
         try {
             // 1. INSERT ke tabel PENGADAAN
-            // Status 'P' (Process) akan diubah menjadi 'F' (Final) oleh Stored Procedure.
+            // Status diatur ke 'Dipesan' agar bisa diambil oleh modul Penerimaan.
             $sql_header = "INSERT INTO pengadaan (timestamp, user_iduser, status, vendor_idvendor, subtotal_nilai, ppn, total_nilai) 
-                           VALUES (?, ?, 'P', ?, 0, 0, 0)";
+                           VALUES (?, ?, 'Dipesan', ?, 0, 0, 0)";
             $stmt_header = $dbconn->prepare($sql_header);
             $stmt_header->bind_param("sii", $tanggal, $iduser, $idvendor);
             $stmt_header->execute();
@@ -89,11 +89,12 @@ switch ($method) {
 
     case 'GET':
         // Logika READ (Menampilkan Daftar Pengadaan)
-        $sql = "SELECT p.idpengadaan, p.timestamp as tanggal, v.nama_vendor, u.username, p.total_nilai 
+        // Menambahkan kolom status agar bisa ditampilkan di frontend
+        $sql = "SELECT p.idpengadaan, p.timestamp as tanggal, v.nama_vendor, u.username, p.total_nilai, p.status
                 FROM pengadaan p
                 JOIN vendor v ON p.vendor_idvendor = v.idvendor
                 JOIN user u ON p.user_iduser = u.iduser
-                ORDER BY p.timestamp ASC, p.idpengadaan ASC";
+                ORDER BY p.timestamp DESC, p.idpengadaan DESC";
         $result = $dbconn->query($sql);
         $data = $result->fetch_all(MYSQLI_ASSOC);
         echo json_encode(['success' => true, 'data' => $data]);

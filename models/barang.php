@@ -140,14 +140,19 @@ function handlePost($dbconn) {
     $jenis = $_POST['jenis_barang'];
     $harga = $_POST['harga_pokok'];
     $status = ($_POST['status'] === 'aktif') ? 1 : 0;
+    
+    try {
+        $stmt = $dbconn->prepare("INSERT INTO barang (nama, idsatuan, jenis, harga, status) VALUES (?, ?, ?, ?, ?)");
+        if (!$stmt) {
+            throw new Exception('Gagal mempersiapkan statement: ' . $dbconn->error);
+        }
+        $stmt->bind_param("sissi", $nama, $idsatuan, $jenis, $harga, $status);
+        $stmt->execute();
 
-    $stmt = $dbconn->prepare("INSERT INTO barang (nama, idsatuan, jenis, harga, status) VALUES (?, ?, ?, ?, ?)");
-    $stmt->bind_param("sissi", $nama, $idsatuan, $jenis, $harga, $status);
-
-    if ($stmt->execute()) {
         echo json_encode(['success' => true, 'message' => 'Barang berhasil ditambahkan.']);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Gagal menambahkan barang: ' . $stmt->error]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Gagal menambahkan barang: ' . $e->getMessage()]);
     }
 }
 
@@ -159,14 +164,19 @@ function handlePut($dbconn) {
     $jenis = $_POST['jenis_barang'];
     $harga = $_POST['harga_pokok'];
     $status = ($_POST['status'] === 'aktif') ? 1 : 0;
+    
+    try {
+        $stmt = $dbconn->prepare("UPDATE barang SET nama = ?, idsatuan = ?, jenis = ?, harga = ?, status = ? WHERE idbarang = ?");
+        if (!$stmt) {
+            throw new Exception('Gagal mempersiapkan statement: ' . $dbconn->error);
+        }
+        $stmt->bind_param("sissii", $nama, $idsatuan, $jenis, $harga, $status, $idbarang);
+        $stmt->execute();
 
-    $stmt = $dbconn->prepare("UPDATE barang SET nama = ?, idsatuan = ?, jenis = ?, harga = ?, status = ? WHERE idbarang = ?");
-    $stmt->bind_param("sissii", $nama, $idsatuan, $jenis, $harga, $status, $idbarang);
-
-    if ($stmt->execute()) {
         echo json_encode(['success' => true, 'message' => 'Barang berhasil diperbarui.']);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Gagal memperbarui barang: ' . $stmt->error]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Gagal memperbarui barang: ' . $e->getMessage()]);
     }
 }
 
@@ -180,23 +190,26 @@ function handleDelete($dbconn) {
     // Hati-hati: jika ada foreign key constraint, ini bisa gagal.
     // Pertama, hapus dari tabel anak jika ada (contoh: kartu_stok)
     // $dbconn->query("DELETE FROM kartu_stok WHERE idbarang = $idbarang");
+    
+    // Menggunakan soft delete untuk keamanan data
+    try {
+        $stmt = $dbconn->prepare("UPDATE barang SET status = 0 WHERE idbarang = ?");
+        if (!$stmt) {
+            throw new Exception('Gagal mempersiapkan statement: ' . $dbconn->error);
+        }
+        $stmt->bind_param("i", $idbarang);
+        $stmt->execute();
 
-    $stmt = $dbconn->prepare("DELETE FROM barang WHERE idbarang = ?");
-    $stmt->bind_param("i", $idbarang);
-
-    if ($stmt->execute()) {
         if ($stmt->affected_rows > 0) {
-            echo json_encode(['success' => true, 'message' => 'Barang berhasil dihapus.']);
+            echo json_encode(['success' => true, 'message' => 'Barang berhasil dinonaktifkan (soft delete).']);
         } else {
+            http_response_code(404);
             echo json_encode(['success' => false, 'message' => 'Barang tidak ditemukan.']);
         }
-    } else {
-        // Jika gagal karena foreign key
-        if ($dbconn->errno == 1451) {
-             echo json_encode(['success' => false, 'message' => 'Gagal menghapus: Barang ini sudah digunakan di transaksi lain.']);
-        } else {
-             echo json_encode(['success' => false, 'message' => 'Gagal menghapus barang: ' . $stmt->error]);
-        }
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Gagal menonaktifkan barang: ' . $e->getMessage()]);
     }
 }
+
 ?>

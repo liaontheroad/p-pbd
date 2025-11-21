@@ -2,6 +2,11 @@
 require_once __DIR__ . '/../config/dbconnect.php';
 require_once __DIR__ . '/../models/auth.php';
 
+// Proper error handling for a JSON API
+ini_set('display_errors', 0); // Jangan tampilkan error di output
+ini_set('log_errors', 1); // Log error ke file
+error_reporting(E_ALL);
+
 header('Content-Type: application/json; charset=utf-8');
 checkAuth(true); // Melindungi API
 
@@ -46,13 +51,22 @@ function handleGet($dbconn) {
         $stmt = $dbconn->prepare("SELECT iduser, username, idrole FROM user WHERE iduser = ?");
         $stmt->bind_param("i", $id);
         $stmt->execute();
-        $result = $stmt->get_result()->fetch_assoc();
-        echo json_encode(['success' => true, 'data' => $result]);
+        $data = $stmt->get_result()->fetch_assoc();
+
+        if ($data) {
+            echo json_encode(['success' => true, 'data' => $data]);
+        } else {
+            http_response_code(404); // Not Found
+            echo json_encode(['success' => false, 'message' => 'User tidak ditemukan.']);
+        }
     } else {
         // Ambil semua user dengan nama role-nya
+        // Perbaikan: Query salah, seharusnya join tabel user dan role, bukan memanggil view di FROM
         $sql = "SELECT u.iduser, u.username, r.nama_role 
-                FROM view_user_role 
+                FROM user u
+                LEFT JOIN role r ON u.idrole = r.idrole
                 ORDER BY u.iduser ASC";
+
         $result = $dbconn->query($sql);
         $data = $result->fetch_all(MYSQLI_ASSOC);
         echo json_encode(['success' => true, 'data' => $data]);

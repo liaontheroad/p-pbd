@@ -66,7 +66,7 @@ checkAuth();
                 <div class="card-header">
                     <h2>Daftar Barang</h2>
                     <div style="display: flex; gap: 1rem; align-items: center;">
-                        <button id="btnFilterAktif" class="btn btn-secondary btn-sm" data-filter="semua">Tampilkan Aktif Saja</button>
+                        <button id="btnFilterAktif" class="btn btn-secondary btn-sm" data-filter="aktif">Tampilkan Semua</button>
                         <button id="btnRefresh" class="btn btn-secondary btn-sm">🔄 Refresh</button>
                     </div>
                 </div>

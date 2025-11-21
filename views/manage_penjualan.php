@@ -16,28 +16,7 @@ checkAuth();
         .form-header { border-bottom: 1px solid #2a3142; }
         .form-footer { border-top: 1px solid #2a3142; }
         #item-list-table th, #item-list-table td { padding: 16px 28px; }
-        #item-list-table input { background: #0f1419; border-color: #3a4254; padding: 8px; text-align: right; }
-        .search-container { position: relative; }
-        #search-results {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: #2a3142;
-            border: 1px solid #3a4254;
-            border-radius: 0 0 10px 10px;
-            z-index: 10;
-            max-height: 250px;
-            overflow-y: auto;
-        }
-        .search-item {
-            padding: 12px 16px;
-            cursor: pointer;
-            border-bottom: 1px solid #3a4254;
-        }
-        .search-item:last-child { border-bottom: none; }
-        .search-item:hover { background: #323948; }
-        .search-item small { color: #8b92a7; }
+        #item-list-table input { background: #0f1419; border-color: #3a4254; padding: 8px; text-align: right; color: #e4e6eb; }
         .total-section { text-align: right; font-size: 1.5rem; font-weight: 700; }
     </style>
 </head>
@@ -67,16 +46,30 @@ checkAuth();
                 <form id="formPenjualan">
                     <!-- Form Header -->
                     <div class="form-header">
-                        <div class="form-group">
-                            <label for="tanggal">Tanggal Penjualan *</label>
-                            <input type="date" id="tanggal" name="tanggal" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="search-barang">Cari & Tambah Barang</label>
-                            <div class="search-container">
-                                <input type="text" id="search-barang" placeholder="Ketik nama barang...">
-                                <div id="search-results" style="display: none;"></div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="tanggal">Tanggal Penjualan *</label>
+                                <input type="date" id="tanggal" name="tanggal" required>
                             </div>
+                            <div class="form-group">
+                                <label for="select-margin">Margin Penjualan *</label>
+                                <select id="select-margin" required><option value="">Memuat margin...</option></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-header" style="padding-top: 0;">
+                        <div class="form-row" style="align-items: flex-end; gap: 16px;">
+                             <div class="form-group" style="flex-grow: 3;">
+                                <label for="select-barang">Pilih Barang untuk Ditambahkan</label>
+                                <select id="select-barang">
+                                    <option value="">Memuat barang...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="jumlah-barang">Jumlah</label>
+                                <input type="number" id="jumlah-barang" value="1" min="1" style="text-align: center;">
+                            </div>
+                            <div class="form-group" style="align-self: flex-end;"><button type="button" id="btn-tambah-barang" class="btn btn-secondary">Tambah ke Daftar</button></div>
                         </div>
                     </div>
 
@@ -110,57 +103,140 @@ checkAuth();
                     </div>
                 </form>
             </div>
+
+            <!-- Sales List Table -->
+            <div class="card" style="margin-top: 32px;">
+                <div class="card-header">
+                    <h2>Daftar Transaksi Penjualan</h2>
+                    <button id="btnRefreshList" class="btn btn-secondary btn-sm">🔄 Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="tablePenjualan">
+                            <thead>
+                                <tr>
+                                    <th>ID Transaksi</th>
+                                    <th>Tanggal</th>
+                                    <th>Kasir</th>
+                                    <th>Margin Penjualan</th>
+                                    <th>Total Nilai</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="penjualanListBody">
+                                <tr>
+                                    <td colspan="6" style="text-align: center;">Memuat data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    loadMargins();
+    loadBarangList();
+    loadSalesList(); // Muat daftar penjualan saat halaman dibuka
     document.getElementById('tanggal').valueAsDate = new Date();
+
+    document.getElementById('btnRefreshList').addEventListener('click', loadSalesList);
 });
 
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
 
-const searchInput = document.getElementById('search-barang');
-const searchResults = document.getElementById('search-results');
-let searchTimeout;
+async function loadBarangList() {
+    try {
+        const response = await fetch(`../models/penjualan.php?action=list_barang`);
+        const result = await response.json();
+        if (result.success) {
+            const barangSelect = document.getElementById('select-barang');
+            barangSelect.innerHTML = '<option value="">Pilih Barang</option>' + 
+                result.data.map(item => {
+                    // Tampilkan harga dasar di dropdown
+                    return `<option value='${JSON.stringify(item)}'>${item.nama} (Stok: ${item.stok}) - Base: ${formatRupiah(item.harga)}</option>`;
+                }).join('');
+        }
+    } catch (error) {
+        console.error('Error loading barang list:', error);
+    }
+}
 
-searchInput.addEventListener('keyup', (e) => {
-    clearTimeout(searchTimeout);
-    const term = e.target.value;
-    if (term.length < 2) {
-        searchResults.style.display = 'none';
+async function loadMargins() {
+    try {
+        const response = await fetch(`../models/penjualan.php?action=list_margins`);
+        const result = await response.json();
+        if (result.success) {
+            const marginSelect = document.getElementById('select-margin');
+            marginSelect.innerHTML = '<option value="">Pilih Margin</option>' + 
+                result.data.map(margin => `<option value="${margin.idmargin_penjualan}" data-persen="${margin.persen}" ${margin.status == 1 ? 'selected' : ''}>${margin.persen}%</option>`).join('');
+        }
+    } catch (error) {
+        console.error('Error loading margin list:', error);
+    }
+}
+
+async function loadSalesList() {
+    try {
+        const response = await fetch(`../models/penjualan.php?action=list_penjualan`);
+        const result = await response.json();
+        const listBody = document.getElementById('penjualanListBody');
+
+        if (result.success && result.data.length > 0) {
+            listBody.innerHTML = result.data.map(sale => {
+                const tanggal = new Date(sale.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+                return `
+                    <tr>
+                        <td>TX-${sale.idpenjualan}</td>
+                        <td>${tanggal}</td>
+                        <td>${sale.username}</td>
+                        <td>${sale.margin_persen}%</td>
+                        <td>${formatRupiah(sale.total_nilai)}</td>
+                        <td class="action-buttons">
+                            <button class="btn btn-secondary btn-sm" onclick="viewSaleDetails(${sale.idpenjualan})">Detail</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        } else {
+            listBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Belum ada transaksi penjualan.</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading sales list:', error);
+        document.getElementById('penjualanListBody').innerHTML = '<tr><td colspan="6" style="text-align: center; color: #f5576c;">Gagal memuat daftar penjualan.</td></tr>';
+    }
+}
+
+
+document.getElementById('btn-tambah-barang').addEventListener('click', () => {
+    const select = document.getElementById('select-barang');
+    const selectedOption = select.options[select.selectedIndex];
+    if (!selectedOption.value) {
+        alert('Silakan pilih barang terlebih dahulu.');
         return;
     }
-    // Debounce search to avoid too many requests
-    searchTimeout = setTimeout(async () => {
-        try {
-            const response = await fetch(`../models/penjualan.php?action=search_barang&term=${term}`);
-            const result = await response.json();
-            if (result.success && result.data.length > 0) {
-                searchResults.innerHTML = result.data.map(item => `
-                    <div class="search-item" onclick='addItem(${JSON.stringify(item)})'>
-                        <strong>${item.nama}</strong><br>
-                        <small>Stok: ${item.stok} | Harga: ${formatRupiah(item.harga_jual)}</small>
-                    </div>
-                `).join('');
-                searchResults.style.display = 'block';
-            } else {
-                searchResults.innerHTML = `<div class="search-item" style="cursor:default;">Tidak ada hasil</div>`;
-                searchResults.style.display = 'block';
-            }
-        } catch (error) {
-            console.error('Error searching barang:', error);
-        }
-    }, 300);
-});
-
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.search-container')) {
-        searchResults.style.display = 'none';
+    const marginSelect = document.getElementById('select-margin');
+    const selectedMarginOption = marginSelect.options[marginSelect.selectedIndex];
+    if (!selectedMarginOption.value) {
+        alert('Silakan pilih margin penjualan terlebih dahulu.');
+        return;
     }
+
+    const jumlah = document.getElementById('jumlah-barang').value;
+    const item = JSON.parse(selectedOption.value);
+    const marginPersen = parseFloat(selectedMarginOption.dataset.persen);
+
+    // Hitung harga jual berdasarkan formula: harga_jual = harga_barang * (1 + margin_penjualan)
+    const harga_dasar = parseFloat(item.harga);
+    const harga_jual = harga_dasar * (1 + (marginPersen / 100));
+    item.harga_jual = harga_jual; // Tambahkan harga jual yang sudah dihitung ke objek item
+
+    addItem(item, jumlah);
 });
 
-function addItem(item) {
+function addItem(item, jumlah = 1) { // item sekarang sudah mengandung harga_jual
     const itemListBody = document.getElementById('item-list-body');
     
     if (document.querySelector(`tr[data-idbarang="${item.idbarang}"]`)) {
@@ -171,16 +247,17 @@ function addItem(item) {
     const row = document.createElement('tr');
     row.setAttribute('data-idbarang', item.idbarang);
     row.innerHTML = `
-        <td>${item.nama}</td>
-        <td><input type="number" class="item-qty" value="1" min="1" max="${item.stok}" onchange="updateTotals()" onkeyup="updateTotals()"></td>
+        <td>${item.nama}<br><small>Stok: ${item.stok} | Harga Dasar: ${formatRupiah(item.harga)}</small></td>
+        <td><input type="number" class="item-qty" value="${jumlah}" min="1" max="${item.stok}" onchange="updateTotals()" onkeyup="updateTotals()"></td>
         <td class="item-price" data-price="${item.harga_jual}">${formatRupiah(item.harga_jual)}</td>
-        <td class="item-subtotal">${formatRupiah(item.harga_jual)}</td>
+        <td class="item-subtotal">${formatRupiah(item.harga_jual * jumlah)}</td>
         <td><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); updateTotals();">X</button></td>
     `;
     itemListBody.appendChild(row);
     
-    searchInput.value = '';
-    searchResults.style.display = 'none';
+    // Reset dropdown dan input jumlah
+    document.getElementById('select-barang').selectedIndex = 0;
+    document.getElementById('jumlah-barang').value = 1;
     updateTotals();
 }
 
@@ -213,6 +290,7 @@ document.getElementById('formPenjualan').addEventListener('submit', async (e) =>
     submitButton.textContent = 'Menyimpan...';
 
     const tanggal = document.getElementById('tanggal').value;
+    const idmargin = document.getElementById('select-margin').value;
     const items = [];
 
     document.querySelectorAll('#item-list-body tr').forEach(row => {
@@ -223,14 +301,14 @@ document.getElementById('formPenjualan').addEventListener('submit', async (e) =>
         });
     });
 
-    if (!tanggal || items.length === 0) {
-        alert('Mohon lengkapi tanggal dan tambahkan minimal satu barang.');
+    if (!tanggal || !idmargin || items.length === 0) {
+        alert('Mohon lengkapi tanggal, pilih margin, dan tambahkan minimal satu barang.');
         submitButton.disabled = false;
         submitButton.textContent = 'Simpan Transaksi Penjualan';
         return;
     }
 
-    const payload = { tanggal, items };
+    const payload = { tanggal, idmargin, items };
 
     try {
         const response = await fetch('../models/penjualan.php', {
@@ -248,6 +326,9 @@ document.getElementById('formPenjualan').addEventListener('submit', async (e) =>
             document.getElementById('tanggal').valueAsDate = new Date();
             document.getElementById('item-list-body').innerHTML = '';
             updateTotals();
+            loadMargins(); // Muat ulang margin
+            loadBarangList(); // Muat ulang daftar barang
+            loadSalesList(); // Muat ulang daftar penjualan
         }
     } catch (error) {
         alert('Terjadi kesalahan: ' + error.message);
@@ -256,6 +337,11 @@ document.getElementById('formPenjualan').addEventListener('submit', async (e) =>
         submitButton.textContent = 'Simpan Transaksi Penjualan';
     }
 });
+
+function viewSaleDetails(id) {
+    // Fungsi ini bisa dikembangkan lebih lanjut, misalnya membuka modal dengan detail item.
+    alert(`Fungsi untuk melihat detail transaksi TX-${id} belum diimplementasikan.`);
+}
 </script>
 
 </body>
