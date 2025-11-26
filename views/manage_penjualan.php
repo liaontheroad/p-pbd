@@ -35,7 +35,11 @@ checkAuth();
                     </div>
                 </div>
                 <div class="header-actions" style="display: flex; gap: 1rem;">
-                    <a href="datamaster.php" class="btn btn-secondary"><span>⚙️</span> Menu Utama</a>
+                    <?php if ($_SESSION['role_id'] == 2): ?>
+                        <a href="dashboard_user.php" class="btn btn-secondary"><span>⬅️</span> Kembali ke Dashboard</a>
+                    <?php else: ?>
+                        <a href="datamaster.php" class="btn btn-secondary"><span>⚙️</span> Menu Utama</a>
+                    <?php endif; ?>
                     <a href="../models/auth.php?action=logout" class="btn btn-danger"><span>🚪</span> Keluar</a>
                 </div>
             </div>

@@ -17,7 +17,7 @@ function handleLogin() {
 
     // 1. Fetch user by username
     // The user table in pbd-script.sql has iduser, username, password, idrole
-    $stmt = $dbconn->prepare("SELECT iduser, username, password FROM user WHERE username = ?");
+    $stmt = $dbconn->prepare("SELECT iduser, username, password, idrole FROM user WHERE username = ?");
     $stmt->bind_param("s", $username);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -36,8 +36,12 @@ function handleLogin() {
             // Password is correct, start session
             $_SESSION['user_id'] = $user['iduser'];
             $_SESSION['username'] = $user['username'];
+            $_SESSION['role_id'] = $user['idrole'];
             
-            echo json_encode(['success' => true, 'message' => 'Login berhasil! Mengalihkan...']);
+            // Tentukan URL redirect berdasarkan role
+            $redirect_url = ($user['idrole'] == 2) ? '../views/dashboard_user.php' : '../views/datamaster.php';
+
+            echo json_encode(['success' => true, 'message' => 'Login berhasil! Mengalihkan...', 'redirect_url' => $redirect_url]);
         } else {
             // Password is not valid
             echo json_encode(['success' => false, 'message' => 'Password yang Anda masukkan salah.']);

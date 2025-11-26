@@ -32,6 +32,10 @@ checkAuth();
         .search-item:hover { background: #323948; }
         .search-item small { color: #8b92a7; }
         .total-section { text-align: right; font-size: 1.5rem; font-weight: 700; }
+        .badge-warning {
+            background: rgba(250, 173, 20, 0.15);
+            color: #faad14;
+        }
         .form-section { margin-bottom: 30px; }
     </style>
 </head>
@@ -50,7 +54,11 @@ checkAuth();
                     </div>
                 </div>
                 <div class="header-actions" style="display: flex; gap: 1rem;">
-                    <a href="datamaster.php" class="btn btn-secondary"><span>⚙️</span> Menu Utama</a>
+                    <?php if ($_SESSION['role_id'] == 2): ?>
+                        <a href="dashboard_user.php" class="btn btn-secondary"><span>⬅️</span> Kembali ke Dashboard</a>
+                    <?php else: ?>
+                        <a href="datamaster.php" class="btn btn-secondary"><span>⚙️</span> Menu Utama</a>
+                    <?php endif; ?>
                     <a href="../models/auth.php?action=logout" class="btn btn-danger"><span>🚪</span> Keluar</a>
                 </div>
             </div>
@@ -143,6 +151,7 @@ checkAuth();
                                     <th>Vendor</th>
                                     <th>Dibuat Oleh</th>
                                     <th>Total Nilai</th>
+                                    <th>Sisa Penerimaan</th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
@@ -213,17 +222,33 @@ async function loadPengadaanList() {
     const tbody = document.getElementById('tableBody');
     if (result.success && result.data.length > 0) {
         tbody.innerHTML = result.data.map(po => `
-            <tr onclick="editPengadaan(${po.idpengadaan})" style="cursor: pointer;" title="Klik untuk edit">
+            <tr onclick="editPengadaan(${po.idpengadaan})" style="cursor: pointer;" title="Klik untuk edit PO-${po.idpengadaan}">
                 <td>PO-${po.idpengadaan}</td>
                 <td>${new Date(po.tanggal).toLocaleDateString('id-ID')}</td>
                 <td>${po.nama_vendor}</td>
                 <td>${po.username}</td>
                 <td>${formatRupiah(po.total_nilai)}</td>
-                <td><span class="badge ${po.status === 'closed' ? 'badge-danger' : 'badge-success'}">${po.status || 'Dipesan'}</span></td>
+                <td>${po.total_dipesan - po.total_diterima} item</td>
+                <td>${getStatusBadge(po.display_status)}</td>
             </tr>
         `).join('');
     } else {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Tidak ada data pengadaan.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Tidak ada data pengadaan.</td></tr>';
+    }
+}
+
+function getStatusBadge(status) {
+    switch (status) {
+        case 'closed':
+            return `<span class="badge badge-danger">Closed</span>`;
+        case 'Dipesan':
+            return `<span class="badge badge-success">Dipesan</span>`;
+        case 'Parsial':
+            return `<span class="badge badge-warning">Parsial</span>`;
+        case 'Diterima Penuh':
+            return `<span class="badge badge-info">Diterima Penuh</span>`; // Assuming an info badge style exists or can be added
+        default:
+            return `<span class="badge">${status}</span>`;
     }
 }
 

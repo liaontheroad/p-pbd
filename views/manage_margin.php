@@ -2,6 +2,13 @@
 require_once '../config/dbconnect.php';
 require_once '../models/auth.php';
 checkAuth();
+
+// Security Check: Pastikan hanya admin (role_id = 1) yang bisa akses
+if ($_SESSION['role_id'] != 1) {
+    // Jika bukan admin, redirect ke dashboard user
+    header('Location: dashboard_user.php');
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">

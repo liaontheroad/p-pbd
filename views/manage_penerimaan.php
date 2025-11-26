@@ -60,7 +60,11 @@ checkAuth();
                     </div>
                 </div>
                 <div class="header-actions" style="display: flex; gap: 1rem;">
-                    <a href="datamaster.php" class="btn btn-secondary"><span>⚙️</span> Menu Utama</a>
+                    <?php if ($_SESSION['role_id'] == 2): ?>
+                        <a href="dashboard_user.php" class="btn btn-secondary"><span>⬅️</span> Kembali ke Dashboard</a>
+                    <?php else: ?>
+                        <a href="datamaster.php" class="btn btn-secondary"><span>⚙️</span> Menu Utama</a>
+                    <?php endif; ?>
                     <a href="../models/auth.php?action=logout" class="btn btn-danger"><span>🚪</span> Keluar</a>
                 </div>
             </div>
@@ -117,6 +121,7 @@ checkAuth();
                         </div>
                         <div class="form-footer" style="padding: 28px 0 0 0; border-top: none;">
                             <button type="button" class="btn btn-secondary" onclick="resetForm()">Batal</button>
+                            <button type="button" id="btn-finalize" class="btn btn-success" style="display: none;" onclick="finalizePenerimaan()">Finalisasi PO</button>
                             <button type="submit" class="btn btn-primary">Simpan Penerimaan</button>
                         </div>
                     </div>
@@ -182,15 +187,18 @@ async function loadPenerimaan() {
                 const statusInfo = statusMap[p.status] || { text: p.status, class: 'badge-secondary' };
                 const tanggal = new Date(p.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
 
+                // Tombol Edit hanya muncul jika status PO bukan 'c' (closed)
+                const editButton = p.po_status !== 'c' 
+                    ? `<button class="btn btn-primary btn-sm" onclick="editPenerimaan('${p.idpenerimaan}')">Edit</button>` 
+                    : '<span title="PO sudah ditutup">-</span>';
+
                 return `
                     <tr>
                         <td>${p.idpenerimaan}</td>
                         <td>PO-${p.idpengadaan}</td>
                         <td>${p.iduser}</td>
                         <td><span class="badge ${statusInfo.class}">${statusInfo.text}</span></td>
-                        <td class="action-buttons">
-                            <button class="btn btn-primary btn-sm" onclick="editPenerimaan('${p.idpenerimaan}')">Edit</button>
-                        </td>
+                        <td class="action-buttons">${editButton}</td>
                         <td>${tanggal}</td>
                     </tr>
                 `;
@@ -286,6 +294,12 @@ async function editPenerimaan(idpenerimaan) {
             document.getElementById('formMethod').value = 'PUT';
             document.getElementById('tanggal').value = data.header.created_at.split(' ')[0];
             document.querySelector('#formPenerimaan button[type="submit"]').textContent = 'Perbarui Penerimaan';
+            document.getElementById('btn-finalize').style.display = 'none'; // Sembunyikan default
+
+            // Tampilkan tombol finalisasi jika kondisi terpenuhi
+            if (data.is_finalizable) {
+                document.getElementById('btn-finalize').style.display = 'inline-flex';
+            }
 
             // Tampilkan PO yang sedang diedit dan nonaktifkan pilihan
             poSelect.innerHTML = `<option value="${data.header.idpengadaan}">PO-${data.header.idpengadaan} (Editing)</option>`;
@@ -326,10 +340,11 @@ function addItemFromPO(item) {
     const row = document.createElement('tr');
     row.setAttribute('data-idbarang', item.idbarang);
     const namaBarang = item.nama_barang || item.nama;
-    const subtotal = item.jumlah * item.harga_satuan;
+    const jumlahSisa = item.jumlah_sisa || item.jumlah; // Fallback to 'jumlah' for edit mode
+    const subtotal = jumlahSisa * item.harga_satuan;
     row.innerHTML = `
         <td>${namaBarang}</td>
-        <td><input type="number" class="item-qty" value="${item.jumlah}" min="0" max="${item.jumlah}" onchange="updateTotals()" title="Jumlah di PO: ${item.jumlah}"></td>
+        <td><input type="number" class="item-qty" value="${jumlahSisa}" min="0" max="${jumlahSisa}" onchange="updateTotals()" title="Jumlah Dipesan: ${item.jumlah_dipesan || item.jumlah} | Sisa: ${jumlahSisa}"></td>
         <td class="item-price" data-price="${item.harga_satuan}">${formatRupiah(item.harga_satuan)}</td>
         <td class="item-subtotal">${formatRupiah(subtotal)}</td>
     `;
@@ -358,6 +373,7 @@ function resetForm() {
     document.getElementById('select-po').disabled = false;
     document.getElementById('nama_vendor').value = '';
     document.querySelector('#formPenerimaan button[type="submit"]').textContent = 'Simpan Penerimaan';
+    document.getElementById('btn-finalize').style.display = 'none';
     updateTotals();
     loadOpenPOs(); // Muat ulang PO yang terbuka
 }
@@ -404,6 +420,33 @@ document.getElementById('formPenerimaan').addEventListener('submit', async (e) =
         alert('Terjadi kesalahan: ' + error.message);
     }
 });
+
+async function finalizePenerimaan() {
+    const idpengadaan = document.getElementById('idpengadaan').value;
+    if (!idpengadaan) {
+        alert('ID Pengadaan tidak ditemukan untuk difinalisasi.');
+        return;
+    }
+
+    if (!confirm(`Anda yakin ingin memfinalisasi (menutup) Pengadaan PO-${idpengadaan}? Status PO akan diubah menjadi 'closed' dan tidak bisa digunakan lagi untuk penerimaan.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idpengadaan: idpengadaan, action: 'finalize' })
+        });
+        const result = await response.json();
+        alert(result.message);
+        if (result.success) {
+            resetForm();
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
 </script>
 
 </body>

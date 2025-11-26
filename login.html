@@ -72,7 +72,7 @@
                     alertDiv.style.display = 'block';
                     
                     setTimeout(() => {
-                        window.location.href = 'views/datamaster.php';
+                        window.location.href = result.redirect_url; // Use the URL from the backend
                     }, 1000);
                 } else {
                     alertDiv.className = 'alert alert-danger';

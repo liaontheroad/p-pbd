@@ -3,6 +3,13 @@ require_once '../config/dbconnect.php'; // Corrected path
 require_once '../models/auth.php'; // Corrected path to auth.php model
 checkAuth();
 
+// Security Check: Pastikan hanya admin (role_id = 1) yang bisa akses halaman ini
+if ($_SESSION['role_id'] != 1) {
+    // Jika bukan admin, redirect ke halaman read-only atau dashboard user
+    header('Location: view_barang.php');
+    exit;
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="id">

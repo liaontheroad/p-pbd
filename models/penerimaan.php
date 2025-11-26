@@ -11,6 +11,9 @@ $input = json_decode(file_get_contents('php://input'), true);
 // Cek jika ada _method untuk simulasi PUT/DELETE dari form
 if ($method === 'POST' && isset($input['_method'])) {
     $method = strtoupper($input['_method']);
+} elseif ($method === 'POST' && isset($input['action']) && $input['action'] === 'finalize') {
+    handleFinalize($dbconn, $input);
+    return;
 }
 
 switch ($method) {
@@ -52,12 +55,16 @@ function handleGet($dbconn) {
                     p.vendor_idvendor,
                     dp.idbarang,
                     b.nama as nama_barang,
-                    dp.jumlah,
+                    dp.jumlah as jumlah_dipesan,
+                    (dp.jumlah - COALESCE((SELECT SUM(dpr.jumlah_terima) 
+                                         FROM detail_penerimaan dpr 
+                                         JOIN penerimaan pr ON dpr.idpenerimaan = pr.idpenerimaan 
+                                         WHERE pr.idpengadaan = dp.idpengadaan AND dpr.barang_idbarang = dp.idbarang), 0)) as jumlah_sisa,
                     dp.harga_satuan
                 FROM pengadaan p
                 JOIN detail_pengadaan dp ON p.idpengadaan = dp.idpengadaan
                 JOIN barang b ON dp.idbarang = b.idbarang
-                WHERE p.idpengadaan = ?";
+                WHERE p.idpengadaan = ? AND (dp.jumlah - COALESCE((SELECT SUM(dpr.jumlah_terima) FROM detail_penerimaan dpr JOIN penerimaan pr ON dpr.idpenerimaan = pr.idpenerimaan WHERE pr.idpengadaan = dp.idpengadaan AND dpr.barang_idbarang = dp.idbarang), 0)) > 0";
         $stmt = $dbconn->prepare($sql);
         $stmt->bind_param("i", $idpengadaan);
         $stmt->execute();
@@ -94,12 +101,39 @@ function handleGet($dbconn) {
         $stmt_detail->execute();
         $response['details'] = $stmt_detail->get_result()->fetch_all(MYSQLI_ASSOC);
 
+        // 3. Cek apakah PO ini bisa difinalisasi
+        $idpengadaan = $response['header']['idpengadaan'] ?? 0;
+        $is_finalizable = false;
+        if ($idpengadaan > 0) {
+            $stmt_check = $dbconn->prepare("
+                SELECT 
+                    (SELECT SUM(jumlah) FROM detail_pengadaan WHERE idpengadaan = ?) as total_dipesan,
+                    (SELECT SUM(jumlah_terima) FROM detail_penerimaan dpr JOIN penerimaan pr ON dpr.idpenerimaan = pr.idpenerimaan WHERE pr.idpengadaan = ?) as total_diterima
+            ");
+            $stmt_check->bind_param("ii", $idpengadaan, $idpengadaan);
+            $stmt_check->execute();
+            $totals = $stmt_check->get_result()->fetch_assoc();
+
+            // Bisa difinalisasi jika total diterima >= total dipesan
+            if ($totals && $totals['total_diterima'] >= $totals['total_dipesan']) {
+                // Dan jika status PO belum 'closed'
+                $stmt_status_po = $dbconn->prepare("SELECT status FROM pengadaan WHERE idpengadaan = ?");
+                $stmt_status_po->bind_param("i", $idpengadaan);
+                $stmt_status_po->execute();
+                $po_status = $stmt_status_po->get_result()->fetch_assoc()['status'] ?? '';
+                if ($po_status !== 'c') $is_finalizable = true;
+            }
+        }
+        $response['is_finalizable'] = $is_finalizable;
         echo json_encode(['success' => true, 'data' => $response]);
 
      } elseif ($action === 'get_penerimaan') {
         // Ambil data penerimaan untuk ditampilkan di tabel
-        $sql = "SELECT idpenerimaan, idpengadaan, iduser, status, created_at FROM penerimaan ORDER BY created_at DESC";
-        $sql = "SELECT idpenerimaan, idpengadaan, iduser, status, created_at FROM penerimaan ORDER BY created_at ASC";
+        // Join dengan pengadaan untuk mendapatkan status PO
+        $sql = "SELECT p.idpenerimaan, p.idpengadaan, p.iduser, p.status, p.created_at, pg.status as po_status
+                FROM penerimaan p
+                JOIN pengadaan pg ON p.idpengadaan = pg.idpengadaan
+                ORDER BY p.created_at DESC";
         $result = $dbconn->query($sql);
         $data = $result->fetch_all(MYSQLI_ASSOC);
         echo json_encode(['success' => true, 'data' => $data]);
@@ -232,4 +266,30 @@ function handlePut($dbconn) {
         echo json_encode(['success' => false, 'message' => 'Gagal memperbarui penerimaan: ' . $e->getMessage()]);
     }
 }
+
+function handleFinalize($dbconn, $input) {
+    $idpengadaan = $input['idpengadaan'] ?? null;
+
+    if (empty($idpengadaan)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'ID Pengadaan tidak valid.']);
+        return;
+    }
+
+    try {
+        // Ubah status pengadaan menjadi 'closed'
+        $stmt = $dbconn->prepare("UPDATE pengadaan SET status = 'c' WHERE idpengadaan = ?");
+        if (!$stmt) throw new Exception("Gagal mempersiapkan statement: " . $dbconn->error);
+        
+        $stmt->bind_param("i", $idpengadaan);
+        $stmt->execute();
+
+        echo json_encode(['success' => true, 'message' => "Pengadaan PO-{$idpengadaan} berhasil difinalisasi (ditutup)."]);
+
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Gagal memfinalisasi pengadaan: ' . $e->getMessage()]);
+    }
+}
+
 ?>

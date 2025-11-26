@@ -4,6 +4,13 @@ require_once '../config/dbconnect.php';
 require_once '../models/auth.php'; 
 checkAuth(); 
 
+// Security Check: Pastikan hanya admin (role_id = 1) yang bisa akses
+if ($_SESSION['role_id'] != 1) {
+    // Jika bukan admin, redirect ke dashboard user
+    header('Location: dashboard_user.php');
+    exit;
+}
+
 // Variabel status aktif/non-aktif untuk select option
 $vendor_statuses = [1 => 'Aktif', 0 => 'Non-Aktif'];
 $badan_hukum_options = ['c' => 'Perusahaan (C)', 'p' => 'Perorangan (P)'];
