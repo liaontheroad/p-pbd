@@ -11,6 +11,19 @@ checkAuth();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Sistem Inventory PBD</title>
     <link rel="stylesheet" href="../css/style.css">
+    <style>
+        /* Make the clickable stock number more visible */
+        #tableBarang tbody td a {
+            color: #8be9fd; /* Bright cyan for high visibility */
+            font-weight: 600;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-underline-offset: 3px;
+        }
+        #tableBarang tbody td a:hover {
+            color: #ffffff; /* White on hover */
+        }
+    </style>
 </head>
 <body>
     <div class="dashboard-content">
@@ -169,6 +182,32 @@ checkAuth();
         </div>
     </div>
 
+    <!-- Modal Stock Card -->
+    <div id="modalStockCard" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 id="stockCardModalTitle">Kartu Stok Barang</h3>
+                <button class="close" onclick="closeStockCardModal()">&times;</button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="tableStockCard">
+                        <thead>
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Jenis Transaksi</th>
+                                <th>Masuk</th>
+                                <th>Keluar</th>
+                                <th>Stok Akhir</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockCardTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Load data on page load
         document.addEventListener('DOMContentLoaded', () => {
@@ -220,7 +259,7 @@ checkAuth();
                             <td>${item.nama_satuan || '-'}</td>
                             <td>${item.jenis_barang || '-'}</td>
                             <td>Rp ${new Intl.NumberFormat('id-ID').format(item.harga_pokok)}</td>
-                            <td>${item.stok}</td>
+                            <td><a href="#" onclick="viewStockCard('${item.idbarang}', '${item.nama_barang}')" title="Lihat Kartu Stok">${item.stok}</a></td>
                             <td><span class="badge ${item.status === 'aktif' ? 'badge-success' : 'badge-danger'}">${item.status}</span></td>
                             <td class="action-buttons">
                                 <button class="btn btn-primary btn-sm" onclick="editBarang('${item.idbarang}')">Edit</button>
@@ -358,6 +397,54 @@ checkAuth();
             document.getElementById('modalForm').classList.remove('show');
         }
 
+        // --- Stock Card Modal Functions ---
+
+        async function viewStockCard(idbarang, namaBarang) {
+            document.getElementById('stockCardModalTitle').textContent = `Kartu Stok - ${namaBarang}`;
+            const tableBody = document.getElementById('stockCardTableBody');
+            tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Memuat histori stok...</td></tr>';
+            document.getElementById('modalStockCard').classList.add('show');
+
+            try {
+                const response = await fetch(`../models/barang.php?action=get_stock_card&idbarang=${idbarang}`);
+                const result = await response.json();
+
+                if (result.success && result.data.length > 0) {
+                    tableBody.innerHTML = result.data.map(log => {
+                        const tanggal = new Date(log.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+                        let jenisTransaksi = '';
+                        switch(log.jenis_transaksi) {
+                            case 'M':
+                                jenisTransaksi = `Penerimaan (ID: ${log.id_transaksi})`;
+                                break;
+                            case 'K':
+                                jenisTransaksi = `Penjualan (ID: ${log.id_transaksi})`;
+                                break;
+                            default:
+                                jenisTransaksi = 'Lainnya';
+                        }
+                        return `
+                            <tr>
+                                <td>${tanggal}</td>
+                                <td>${jenisTransaksi}</td>
+                                <td style="text-align: right; color: #50fa7b;">${log.masuk > 0 ? `+${log.masuk}` : '0'}</td>
+                                <td style="text-align: right; color: #f5576c;">${log.keluar > 0 ? `-${log.keluar}` : '0'}</td>
+                                <td style="text-align: right; font-weight: bold;">${log.stok}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Belum ada riwayat stok untuk barang ini.</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error loading stock card:', error);
+                tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #f5576c;">Gagal memuat riwayat stok.</td></tr>';
+            }
+        }
+
+        function closeStockCardModal() {
+            document.getElementById('modalStockCard').classList.remove('show');
+        }
         // Refresh button
         document.getElementById('btnRefresh').addEventListener('click', () => {
             loadBarang();
@@ -367,7 +454,10 @@ checkAuth();
         // Close modal when clicking outside
         window.onclick = function(event) {
             const modal = document.getElementById('modalForm');
-            if (event.target === modal) {
+            const stockCardModal = document.getElementById('modalStockCard');
+            if (event.target === stockCardModal) {
+                closeStockCardModal();
+            } else if (event.target === modal) {
                 closeModal();
             }
         }

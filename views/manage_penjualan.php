@@ -53,7 +53,7 @@ checkAuth();
                             </div>
                             <div class="form-group">
                                 <label for="select-margin">Margin Penjualan *</label>
-                                <select id="select-margin" required><option value="">Memuat margin...</option></select>
+                                <input type="text" id="margin-display" readonly placeholder="Memuat margin...">
                             </div>
                         </div>
                     </div>
@@ -136,6 +136,8 @@ checkAuth();
     </div>
 
 <script>
+let activeMarginPercent = null; // Global variable to store the active margin percentage
+
 document.addEventListener('DOMContentLoaded', () => {
     loadMargins();
     loadBarangList();
@@ -170,8 +172,13 @@ async function loadMargins() {
         const result = await response.json();
         if (result.success) {
             const marginSelect = document.getElementById('select-margin');
-            marginSelect.innerHTML = '<option value="">Pilih Margin</option>' + 
-                result.data.map(margin => `<option value="${margin.idmargin_penjualan}" data-persen="${margin.persen}" ${margin.status == 1 ? 'selected' : ''}>${margin.persen}%</option>`).join('');
+            const marginDisplay = document.getElementById('margin-display');
+            if (result.data && result.data.length > 0) {
+                activeMarginPercent = parseFloat(result.data[0].persen);
+                marginDisplay.value = `${activeMarginPercent}%`;
+            } else {
+                marginDisplay.value = 'Tidak ada margin aktif';
+            }
         }
     } catch (error) {
         console.error('Error loading margin list:', error);
@@ -217,20 +224,18 @@ document.getElementById('btn-tambah-barang').addEventListener('click', () => {
         alert('Silakan pilih barang terlebih dahulu.');
         return;
     }
-    const marginSelect = document.getElementById('select-margin');
-    const selectedMarginOption = marginSelect.options[marginSelect.selectedIndex];
-    if (!selectedMarginOption.value) {
-        alert('Silakan pilih margin penjualan terlebih dahulu.');
+    
+    if (activeMarginPercent === null) {
+        alert('Margin penjualan aktif tidak ditemukan. Silakan atur di manajemen margin.');
         return;
     }
 
     const jumlah = document.getElementById('jumlah-barang').value;
     const item = JSON.parse(selectedOption.value);
-    const marginPersen = parseFloat(selectedMarginOption.dataset.persen);
 
     // Hitung harga jual berdasarkan formula: harga_jual = harga_barang * (1 + margin_penjualan)
-    const harga_dasar = parseFloat(item.harga);
-    const harga_jual = harga_dasar * (1 + (marginPersen / 100));
+    const harga_dasar = parseFloat(item.harga); // harga_dasar is harga_pokok from barang table
+    const harga_jual = harga_dasar * (1 + (activeMarginPercent / 100));
     item.harga_jual = harga_jual; // Tambahkan harga jual yang sudah dihitung ke objek item
 
     addItem(item, jumlah);
@@ -290,7 +295,6 @@ document.getElementById('formPenjualan').addEventListener('submit', async (e) =>
     submitButton.textContent = 'Menyimpan...';
 
     const tanggal = document.getElementById('tanggal').value;
-    const idmargin = document.getElementById('select-margin').value;
     const items = [];
 
     document.querySelectorAll('#item-list-body tr').forEach(row => {
@@ -301,14 +305,14 @@ document.getElementById('formPenjualan').addEventListener('submit', async (e) =>
         });
     });
 
-    if (!tanggal || !idmargin || items.length === 0) {
-        alert('Mohon lengkapi tanggal, pilih margin, dan tambahkan minimal satu barang.');
+    if (!tanggal || items.length === 0 || activeMarginPercent === null) {
+        alert('Mohon lengkapi tanggal, pastikan margin aktif tersedia, dan tambahkan minimal satu barang.');
         submitButton.disabled = false;
         submitButton.textContent = 'Simpan Transaksi Penjualan';
         return;
     }
 
-    const payload = { tanggal, idmargin, items };
+    const payload = { tanggal, items }; // idmargin is no longer sent from frontend
 
     try {
         const response = await fetch('../models/penjualan.php', {

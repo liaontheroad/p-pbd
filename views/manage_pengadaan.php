@@ -121,6 +121,7 @@ checkAuth();
                         </div>
                         <div class="form-footer" style="padding: 28px 0 0 0; border-top: none; display:flex; gap:1rem;">
                             <button type="button" class="btn btn-secondary" onclick="resetForm()">Batal</button>
+                            <button type="button" id="btn-finalize" class="btn btn-success" style="display: none;" onclick="finalizePengadaan()">Finalisasi Pengadaan</button>
                             <button type="submit" class="btn btn-primary">Simpan Pengadaan</button>
                         </div>
                     </div>
@@ -142,6 +143,7 @@ checkAuth();
                                     <th>Vendor</th>
                                     <th>Dibuat Oleh</th>
                                     <th>Total Nilai</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody id="tableBody">
@@ -211,12 +213,13 @@ async function loadPengadaanList() {
     const tbody = document.getElementById('tableBody');
     if (result.success && result.data.length > 0) {
         tbody.innerHTML = result.data.map(po => `
-            <tr>
+            <tr onclick="editPengadaan(${po.idpengadaan})" style="cursor: pointer;" title="Klik untuk edit">
                 <td>PO-${po.idpengadaan}</td>
                 <td>${new Date(po.tanggal).toLocaleDateString('id-ID')}</td>
                 <td>${po.nama_vendor}</td>
                 <td>${po.username}</td>
                 <td>${formatRupiah(po.total_nilai)}</td>
+                <td><span class="badge ${po.status === 'closed' ? 'badge-danger' : 'badge-success'}">${po.status || 'Dipesan'}</span></td>
             </tr>
         `).join('');
     } else {
@@ -277,6 +280,7 @@ function resetForm() {
     document.getElementById('item-list-body').innerHTML = '';
     document.getElementById('formTitle').textContent = 'Buat Pengadaan Baru';
     document.querySelector('#formPengadaan button[type="submit"]').textContent = 'Simpan Pengadaan';
+    document.getElementById('btn-finalize').style.display = 'none';
     updateTotals();
 }
 
@@ -337,11 +341,17 @@ async function editPengadaan(id) {
         document.getElementById('idvendor').value = po.idvendor;
         document.getElementById('iduser').value = po.iduser;
         
+        // Show finalize button if applicable
+        if (po.is_finalizable) {
+            document.getElementById('btn-finalize').style.display = 'inline-flex';
+        }
+
         const itemListBody = document.getElementById('item-list-body');
         itemListBody.innerHTML = '';
         po.details.forEach(item => {
             const row = document.createElement('tr');
             row.setAttribute('data-idbarang', item.idbarang);
+            const isReceived = item.jumlah == item.total_diterima;
             row.innerHTML = `
                 <td>${item.nama_barang}</td>
                 <td><input type="number" class="item-qty" value="${item.jumlah}" min="1" oninput="updateTotals()"></td>
@@ -377,6 +387,31 @@ async function deletePengadaan(id) {
     }
 }
 
+async function finalizePengadaan() {
+    const idpengadaan = document.getElementById('idpengadaan').value;
+    if (!idpengadaan) {
+        alert('ID Pengadaan tidak ditemukan.');
+        return;
+    }
+
+    if (!confirm(`Anda yakin ingin memfinalisasi (menutup) Pengadaan PO-${idpengadaan}? Status akan diubah menjadi 'closed' dan tidak bisa diubah lagi.`)) return;
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idpengadaan: idpengadaan, action: 'finalize' })
+        });
+        const result = await response.json();
+        alert(result.message);
+        if (result.success) {
+            resetForm();
+            loadPengadaanList();
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
 </script>
 </body>
 </html>

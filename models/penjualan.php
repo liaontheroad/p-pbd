@@ -30,13 +30,14 @@ function handleGet($dbconn) {
     
     if ($action === 'list_margins') {
         try {
-            // Ambil semua margin, yang aktif akan dipilih secara default di frontend
-            $margin_result = $dbconn->query("SELECT idmargin_penjualan, persen, status FROM margin_penjualan ORDER BY status DESC, persen ASC");
-            $margins = $margin_result->fetch_all(MYSQLI_ASSOC);
-            echo json_encode(['success' => true, 'data' => $margins]);
+            // Ambil hanya margin yang aktif (status = 1). Diasumsikan hanya ada satu.
+            $margin_result = $dbconn->query("SELECT idmargin_penjualan, persen FROM margin_penjualan WHERE status = 1 LIMIT 1");
+            // FIX: Always return an array to be compatible with frontend's .map() function.
+            $margin = $margin_result->fetch_all(MYSQLI_ASSOC); // Fetch as an array
+            echo json_encode(['success' => true, 'data' => $margin]);
         } catch (Exception $e) {
             http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Gagal mengambil daftar margin: ' . $e->getMessage()]);
+            echo json_encode(['success' => false, 'message' => 'Gagal mengambil margin aktif: ' . $e->getMessage()]);
         }
         return;
     }
@@ -91,20 +92,28 @@ function handlePost($dbconn) {
 
     $tanggal = $input['tanggal'] ?? null;
     $items = $input['items'] ?? [];
-    $idmargin = $input['idmargin'] ?? null; // Ambil idmargin dari frontend
     $iduser = $_SESSION['user_id'];
-
-    if (empty($tanggal) || empty($items) || empty($idmargin)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Data tidak lengkap: Tanggal, Margin, dan minimal satu barang harus diisi.']);
-        return;
-    }
 
     // Memulai transaksi database
     $dbconn->begin_transaction();
 
     try {
-        // Calculate totals before inserting the header
+        // 1. Ambil ID margin yang aktif langsung dari database
+        $result_margin = $dbconn->query("SELECT idmargin_penjualan FROM margin_penjualan WHERE status = 1 LIMIT 1");
+        if ($result_margin->num_rows === 0) {
+            throw new Exception("Tidak ada margin penjualan yang aktif. Silakan atur satu margin aktif terlebih dahulu.");
+        }
+        $idmargin = $result_margin->fetch_assoc()['idmargin_penjualan'];
+
+        // Validasi input setelah mendapatkan margin
+        if (empty($tanggal) || empty($items)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Data tidak lengkap: Tanggal dan minimal satu barang harus diisi.']);
+            $dbconn->rollback(); // Batalkan transaksi sebelum keluar
+            return;
+        }
+
+        // Hitung total sebelum memasukkan header
         $subtotal_nilai = 0;
         foreach ($items as $item) {
             $subtotal_nilai += ($item['harga_jual'] * $item['jumlah']);

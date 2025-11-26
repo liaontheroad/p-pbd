@@ -62,11 +62,12 @@ function handleGet($dbconn) {
     } elseif ($action === 'get_stats') {
         // Ambil statistik untuk dashboard
         $sql = "SELECT 
-                    COUNT(idbarang) as total_barang,
-                    SUM(harga) as total_nilai 
+                    COUNT(idbarang) AS total_barang,
+                    SUM(harga) AS total_nilai,
+                    (SELECT SUM(stok_terakhir(idbarang)) FROM barang WHERE status = 1) AS total_stok
                 FROM barang WHERE status = 1";
         $result = $dbconn->query($sql)->fetch_assoc();
-        $result['total_stok'] = 0; // Placeholder, karena stok belum ada di tabel barang
+        
         echo json_encode(['success' => true, 'data' => $result]);
 
     } elseif ($action === 'get_satuan') {
@@ -75,6 +76,26 @@ function handleGet($dbconn) {
         $data = $result->fetch_all(MYSQLI_ASSOC);
         echo json_encode(['success' => true, 'data' => $data]);
 
+    } elseif ($action === 'get_stock_card' && isset($_GET['idbarang'])) {
+        // Ambil histori stok (kartu stok) untuk satu barang
+        try {
+            $idbarang = $_GET['idbarang'];
+            $stmt = $dbconn->prepare(
+                "SELECT idkartu_stok, created_at, jenis_transaksi, id_transaksi, masuk, keluar, stok 
+                 FROM kartu_stok 
+                 WHERE idbarang = ? 
+                 ORDER BY created_at DESC, idkartu_stok DESC"
+            );
+            $stmt->bind_param("i", $idbarang);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $data = $result->fetch_all(MYSQLI_ASSOC);
+            echo json_encode(['success' => true, 'data' => $data]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Gagal mengambil kartu stok: ' . $e->getMessage()]);
+        }
+        return;
     } else {
         // Ambil semua barang untuk tabel utama
         $filter = $_GET['filter'] ?? 'aktif'; // Default filter adalah 'aktif'
