@@ -283,6 +283,12 @@ function addItem(item, jumlah = 1) {
     document.getElementById('select-barang').selectedIndex = 0; // Reset dropdown
     document.getElementById('jumlah-barang').value = 1; // Reset input jumlah
     updateTotals();
+
+    // Kunci dropdown vendor setelah item pertama ditambahkan untuk memastikan konsistensi
+    const vendorSelect = document.getElementById('idvendor');
+    if (!vendorSelect.disabled) {
+        vendorSelect.disabled = true;
+    }
 }
 
 function updateTotals() {
@@ -306,6 +312,9 @@ function resetForm() {
     document.getElementById('formTitle').textContent = 'Buat Pengadaan Baru';
     document.querySelector('#formPengadaan button[type="submit"]').textContent = 'Simpan Pengadaan';
     document.getElementById('btn-finalize').style.display = 'none';
+    
+    // Buka kembali kunci dropdown vendor saat form di-reset
+    document.getElementById('idvendor').disabled = false;
     updateTotals();
 }
 

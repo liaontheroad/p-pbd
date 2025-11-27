@@ -1,4 +1,9 @@
 <?php
+// --- DEBUGGING: Temporarily enable full error reporting ---
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+// --- END DEBUGGING ---
 require_once __DIR__ . '/../config/dbconnect.php';
 require_once __DIR__ . '/../models/auth.php';
 
@@ -56,7 +61,17 @@ function handleGet($dbconn) {
     } else {
         // Ambil semua data margin dari view untuk tabel (sudah benar)
         try {
-            $sql = "SELECT idmargin_penjualan, persen, status, created_at, updated_at, username FROM view_margin_user ORDER BY created_at DESC";
+            // FIX: Use a LEFT JOIN to ensure margins are shown even if the user is deleted.
+            $sql = "SELECT 
+                        m.idmargin_penjualan, 
+                        m.persen, 
+                        m.status, 
+                        m.created_at, 
+                        m.updated_at, 
+                        COALESCE(u.username, 'N/A') as username 
+                    FROM margin_penjualan m
+                    LEFT JOIN user u ON m.iduser = u.iduser
+                    ORDER BY m.created_at DESC";
             $result = $dbconn->query($sql);
             $data = $result->fetch_all(MYSQLI_ASSOC);
             echo json_encode(['success' => true, 'data' => $data]);
@@ -71,8 +86,7 @@ function handlePost($dbconn) {
     $input = json_decode(file_get_contents('php://input'), true);
 
     $persen = $input['persen'] ?? null;
-    $status_text = $input['status'] ?? 'tidak_aktif';
-    $status = ($status_text === 'aktif') ? 1 : 0;
+    $status = 1; // Otomatis set status ke 1 (aktif) untuk setiap margin baru
     $iduser = $_SESSION['user_id'];
 
     if (!is_numeric($persen)) {
@@ -83,11 +97,9 @@ function handlePost($dbconn) {
 
     $dbconn->begin_transaction();
     try {
-        // Jika status baru adalah 'aktif', nonaktifkan semua margin lain
-        if ($status == 1) {
-            if ($dbconn->query("UPDATE margin_penjualan SET status = 0") === false) {
-                throw new Exception("Gagal menonaktifkan margin yang ada: " . $dbconn->error);
-            }
+        // Karena margin baru selalu aktif, nonaktifkan semua margin lain terlebih dahulu.
+        if ($dbconn->query("UPDATE margin_penjualan SET status = 0") === false) {
+            throw new Exception("Gagal menonaktifkan margin yang ada: " . $dbconn->error);
         }
 
         // Since idmargin_penjualan is not AUTO_INCREMENT, we must generate it manually.

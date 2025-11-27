@@ -39,7 +39,7 @@ function handleLogin() {
             $_SESSION['role_id'] = $user['idrole'];
             
             // Tentukan URL redirect berdasarkan role
-            $redirect_url = ($user['idrole'] == 2) ? '../views/dashboard_user.php' : '../views/datamaster.php';
+            $redirect_url = ($user['idrole'] == 1 || $user['idrole'] == 2) ? 'views/datamaster.php' : 'views/dashboard_user.php';
 
             echo json_encode(['success' => true, 'message' => 'Login berhasil! Mengalihkan...', 'redirect_url' => $redirect_url]);
         } else {
