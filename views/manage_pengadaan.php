@@ -1,7 +1,8 @@
 <?php
-require_once '../config/dbconnect.php';
+// The checkAuth() function must be called at the very beginning to initialize the session.
 require_once '../models/auth.php';
 checkAuth();
+require_once '../config/dbconnect.php';
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -19,7 +20,7 @@ checkAuth();
         #item-list-table input { 
             background: #0f1419; border-color: #3a4254; 
             padding: 8px; text-align: right; 
-            color: #e4e6eb; /* Menambahkan warna teks terang */
+            color: #e4e6eb; 
         }
         .search-container { position: relative; }
         #search-results {
@@ -153,6 +154,7 @@ checkAuth();
                                     <th>Total Nilai</th>
                                     <th>Sisa Penerimaan</th>
                                     <th>Status</th>
+                                    <th>Aksi</th>
                                 </tr>
                             </thead>
                             <tbody id="tableBody">
@@ -165,19 +167,44 @@ checkAuth();
         </div>
     </div>
 
+    <!-- Modal Detail Pengadaan -->
+    <div id="modalDetail" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 id="detailModalTitle">Detail Pengadaan</h3>
+                <button class="close" onclick="closeDetailModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 28px;">
+                <div class="form-row" style="margin-bottom: 20px; background: #191f2c; padding: 16px; border-radius: 8px;">
+                    <div class="form-group"><label>ID Pengadaan:</label><p id="detailIdPO" class="modal-info"></p></div>
+                    <div class="form-group"><label>Vendor:</label><p id="detailVendor" class="modal-info"></p></div>
+                    <div class="form-group"><label>Tanggal:</label><p id="detailTanggal" class="modal-info"></p></div>
+                    <div class="form-group"><label>Dibuat Oleh:</label><p id="detailUser" class="modal-info"></p></div>
+                </div>
+
+                <div class="table-responsive">
+                    <table id="detail-item-list-table">
+                        <thead>
+                            <tr>
+                                <th>Nama Barang</th><th width="15%">Jumlah</th><th width="20%">Harga Beli</th><th width="20%">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detail-item-list-body"></tbody>
+                    </table>
+                </div>
+                <div class="total-section" style="margin-top: 20px;">
+                    <span>Total: </span><span id="detail-grand-total">Rp 0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
 <script>
 const API_URL = '../models/pengadaan.php';
 
 document.addEventListener('DOMContentLoaded', () => {
     loadInitialData();
     document.getElementById('tanggal').valueAsDate = new Date();
-
-    // Cek apakah ada parameter 'edit_id' di URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const editId = urlParams.get('edit_id');
-    if (editId) {
-        editPengadaan(editId);
-    }
 });
 
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
@@ -222,7 +249,7 @@ async function loadPengadaanList() {
     const tbody = document.getElementById('tableBody');
     if (result.success && result.data.length > 0) {
         tbody.innerHTML = result.data.map(po => `
-            <tr onclick="editPengadaan(${po.idpengadaan})" style="cursor: pointer;" title="Klik untuk edit PO-${po.idpengadaan}">
+            <tr>
                 <td>PO-${po.idpengadaan}</td>
                 <td>${new Date(po.tanggal).toLocaleDateString('id-ID')}</td>
                 <td>${po.nama_vendor}</td>
@@ -230,10 +257,13 @@ async function loadPengadaanList() {
                 <td>${formatRupiah(po.total_nilai)}</td>
                 <td>${po.total_dipesan - po.total_diterima} item</td>
                 <td>${getStatusBadge(po.display_status)}</td>
+                <td class="action-buttons">
+                    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); viewPengadaanDetails(${po.idpengadaan})">Lihat Detail</button>
+                </td>
             </tr>
         `).join('');
     } else {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Tidak ada data pengadaan.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">Tidak ada data pengadaan.</td></tr>';
     }
 }
 
@@ -269,6 +299,10 @@ function addItem(item, jumlah = 1) {
         alert('Barang sudah ada di dalam daftar.');
         return;
     }
+
+    // Kunci dropdown vendor setelah item pertama ditambahkan
+    document.getElementById('idvendor').disabled = true;
+
     const row = document.createElement('tr');
     row.setAttribute('data-idbarang', item.idbarang);
     const subtotal = jumlah * item.harga;
@@ -284,38 +318,41 @@ function addItem(item, jumlah = 1) {
     document.getElementById('jumlah-barang').value = 1; // Reset input jumlah
     updateTotals();
 
-    // Kunci dropdown vendor setelah item pertama ditambahkan untuk memastikan konsistensi
-    const vendorSelect = document.getElementById('idvendor');
-    if (!vendorSelect.disabled) {
-        vendorSelect.disabled = true;
-    }
 }
 
 function updateTotals() {
     let grandTotal = 0;
-    document.querySelectorAll('#item-list-body tr').forEach(row => {
+    const itemRows = document.querySelectorAll('#item-list-body tr');
+    const vendorSelect = document.getElementById('idvendor');
+
+    itemRows.forEach(row => {
         const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
         const price = parseFloat(row.querySelector('.item-price').dataset.price) || 0;
         const subtotal = qty * price;
         grandTotal += subtotal;
         row.querySelector('.item-subtotal').textContent = formatRupiah(subtotal);
     });
+
     document.getElementById('grand-total').textContent = formatRupiah(grandTotal);
+
+    // Re-enable the vendor dropdown only if all items have been removed
+    if (itemRows.length === 0) {
+        vendorSelect.disabled = false; // Buka kembali kunci dropdown vendor
+    }
 }
 
 function resetForm() {
     document.getElementById('formPengadaan').reset();
-    document.getElementById('idpengadaan').value = '';
     document.getElementById('formMethod').value = '';
     document.getElementById('tanggal').valueAsDate = new Date();
     document.getElementById('item-list-body').innerHTML = '';
     document.getElementById('formTitle').textContent = 'Buat Pengadaan Baru';
     document.querySelector('#formPengadaan button[type="submit"]').textContent = 'Simpan Pengadaan';
     document.getElementById('btn-finalize').style.display = 'none';
-    
-    // Buka kembali kunci dropdown vendor saat form di-reset
-    document.getElementById('idvendor').disabled = false;
-    updateTotals();
+    document.getElementById('idvendor').disabled = false; // Pastikan vendor bisa dipilih lagi
+    document.getElementById('idpengadaan').value = '';
+    document.getElementById('username').value = "<?php echo htmlspecialchars($_SESSION['username']); ?>";
+    updateTotals(); // Recalculate total (should be 0)
 }
 
 document.getElementById('formPengadaan').addEventListener('submit', async (e) => {
@@ -339,7 +376,7 @@ document.getElementById('formPengadaan').addEventListener('submit', async (e) =>
 
     const payload = {
         idpengadaan: formData.get('idpengadaan'),
-        idvendor: formData.get('idvendor'),
+        idvendor: document.getElementById('idvendor').value, // Get value directly from the element
         iduser: formData.get('iduser'),
         tanggal: formData.get('tanggal'),
         items: items
@@ -361,46 +398,6 @@ document.getElementById('formPengadaan').addEventListener('submit', async (e) =>
         alert('Terjadi kesalahan: ' + error.message);
     }
 });
-
-async function editPengadaan(id) {
-    const result = await fetchData(`?id=${id}`);
-    if (result.success) {
-        const po = result.data;
-        resetForm();
-
-        document.getElementById('formTitle').textContent = `Edit Pengadaan PO-${po.idpengadaan}`;
-        document.getElementById('idpengadaan').value = po.idpengadaan;
-        document.getElementById('formMethod').value = 'PUT';
-        document.getElementById('tanggal').value = po.tanggal;
-        document.getElementById('idvendor').value = po.idvendor;
-        document.getElementById('iduser').value = po.iduser;
-        
-        // Show finalize button if applicable
-        if (po.is_finalizable) {
-            document.getElementById('btn-finalize').style.display = 'inline-flex';
-        }
-
-        const itemListBody = document.getElementById('item-list-body');
-        itemListBody.innerHTML = '';
-        po.details.forEach(item => {
-            const row = document.createElement('tr');
-            row.setAttribute('data-idbarang', item.idbarang);
-            const isReceived = item.jumlah == item.total_diterima;
-            row.innerHTML = `
-                <td>${item.nama_barang}</td>
-                <td><input type="number" class="item-qty" value="${item.jumlah}" min="1" oninput="updateTotals()"></td>
-                <td class="item-price" data-price="${item.harga_satuan}">${formatRupiah(item.harga_satuan)}</td>
-                <td class="item-subtotal">${formatRupiah(item.subtotal)}</td>
-                <td><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove(); updateTotals();">X</button></td>
-            `;
-            itemListBody.appendChild(row);
-        });
-
-        updateTotals();
-        document.querySelector('#formPengadaan button[type="submit"]').textContent = 'Perbarui Pengadaan';
-        window.scrollTo(0, 0);
-    }
-}
 
 async function deletePengadaan(id) {
     if (!confirm(`Yakin ingin menghapus Pengadaan PO-${id}? Aksi ini tidak dapat dibatalkan.`)) return;
@@ -446,6 +443,56 @@ async function finalizePengadaan() {
         alert('Error: ' + error.message);
     }
 }
+
+async function viewPengadaanDetails(id) {
+    const result = await fetchData(`?id=${id}`);
+    if (result.success) {
+        const po = result.data;
+
+        // Populate Modal Header
+        document.getElementById('detailModalTitle').textContent = `Detail Pengadaan PO-${po.idpengadaan}`;
+        document.getElementById('detailIdPO').textContent = `PO-${po.idpengadaan}`;
+        document.getElementById('detailVendor').textContent = po.nama_vendor;
+        document.getElementById('detailTanggal').textContent = new Date(po.tanggal).toLocaleDateString('id-ID');
+        document.getElementById('detailUser').textContent = po.username;
+
+        // Populate Item List
+        const detailBody = document.getElementById('detail-item-list-body');
+        detailBody.innerHTML = '';
+        let grandTotal = 0;
+        po.details.forEach(item => {
+            const subtotal = item.jumlah * item.harga_satuan;
+            grandTotal += subtotal;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${item.nama_barang}</td>
+                <td style="text-align: right;">${item.jumlah}</td>
+                <td style="text-align: right;">${formatRupiah(item.harga_satuan)}</td>
+                <td style="text-align: right;">${formatRupiah(subtotal)}</td>
+            `;
+            detailBody.appendChild(row);
+        });
+
+        // Populate Grand Total
+        document.getElementById('detail-grand-total').textContent = formatRupiah(grandTotal);
+
+        // Show Modal
+        document.getElementById('modalDetail').classList.add('show');
+    } else {
+        alert('Gagal memuat detail pengadaan.');
+    }
+}
+
+function closeDetailModal() {
+    document.getElementById('modalDetail').classList.remove('show');
+}
+
+// Close detail modal if clicked outside
+window.addEventListener('click', (event) => {
+    if (event.target == document.getElementById('modalDetail')) {
+        closeDetailModal();
+    }
+});
 </script>
 </body>
 </html>

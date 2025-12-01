@@ -27,6 +27,11 @@ $dbconn->close();
 // ...
 function handleGet($dbconn) {
     $action = $_GET['action'] ?? null;
+
+    if ($action === 'get_penjualan_details' && isset($_GET['id'])) {
+        getPenjualanById($dbconn, $_GET['id']);
+        return;
+    }
     
     if ($action === 'list_margins') {
         try {
@@ -71,7 +76,7 @@ function handleGet($dbconn) {
                     FROM penjualan p
                     JOIN user u ON p.iduser = u.iduser
                     JOIN margin_penjualan mp ON p.idmargin_penjualan = mp.idmargin_penjualan
-                    ORDER BY p.created_at DESC";
+                    ORDER BY p.created_at DESC, p.idpenjualan DESC";
             $result = $dbconn->query($sql);
             $penjualan_list = $result->fetch_all(MYSQLI_ASSOC);
             echo json_encode(['success' => true, 'data' => $penjualan_list]);
@@ -84,6 +89,56 @@ function handleGet($dbconn) {
     else {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Aksi tidak valid.']);
+    }
+}
+
+function getPenjualanById($dbconn, $id) {
+    try {
+        // 1. Ambil data header penjualan
+        $stmt_header = $dbconn->prepare("
+            SELECT 
+                pj.idpenjualan, 
+                pj.created_at,
+                u.username
+            FROM penjualan pj
+            LEFT JOIN user u ON pj.iduser = u.iduser
+            WHERE pj.idpenjualan = ?
+        ");
+        if (!$stmt_header) throw new Exception("Gagal mempersiapkan statement header: " . $dbconn->error);
+        
+        $stmt_header->bind_param("i", $id);
+        $stmt_header->execute();
+        $result_header = $stmt_header->get_result();
+        $penjualan = $result_header->fetch_assoc();
+
+        if (!$penjualan) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => "Penjualan dengan ID {$id} tidak ditemukan."]);
+            return;
+        }
+
+        // 2. Ambil data detail item penjualan
+        $stmt_details = $dbconn->prepare("
+            SELECT 
+                dp.idbarang,
+                b.nama as nama_barang,
+                dp.jumlah,
+                dp.harga_satuan,
+                dp.subtotal
+            FROM detail_penjualan dp
+            JOIN barang b ON dp.idbarang = b.idbarang
+            WHERE dp.penjualan_idpenjualan = ?
+        ");
+        if (!$stmt_details) throw new Exception("Gagal mempersiapkan statement detail: " . $dbconn->error);
+
+        $stmt_details->bind_param("i", $id);
+        $stmt_details->execute();
+        $penjualan['details'] = $stmt_details->get_result()->fetch_all(MYSQLI_ASSOC);
+
+        echo json_encode(['success' => true, 'data' => $penjualan]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Gagal mengambil detail penjualan: ' . $e->getMessage()]);
     }
 }
 

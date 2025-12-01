@@ -139,6 +139,41 @@ checkAuth();
         </div>
     </div>
 
+    <!-- Modal Detail Penjualan -->
+    <div id="modalDetailPenjualan" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 id="detailModalTitle">Detail Penjualan</h3>
+                <button class="close" onclick="closeDetailModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 28px;">
+                <div class="form-row" style="margin-bottom: 20px; background: #191f2c; padding: 16px; border-radius: 8px;">
+                    <div class="form-group"><label>ID Penjualan:</label><p id="detailIdPenjualan" class="modal-info"></p></div>
+                    <div class="form-group"><label>Pelanggan:</label><p id="detailPelanggan" class="modal-info"></p></div>
+                    <div class="form-group"><label>Tanggal:</label><p id="detailTanggal" class="modal-info"></p></div>
+                    <div class="form-group"><label>Dibuat Oleh:</label><p id="detailUser" class="modal-info"></p></div>
+                </div>
+
+                <div class="table-responsive">
+                    <table id="detail-item-list-table">
+                        <thead>
+                            <tr>
+                                <th>Nama Barang</th>
+                                <th width="15%">Jumlah</th>
+                                <th width="20%">Harga Jual</th>
+                                <th width="20%">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detail-item-list-body"></tbody>
+                    </table>
+                </div>
+                <div class="total-section" style="margin-top: 20px;">
+                    <span>Total: </span><span id="detail-grand-total">Rp 0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
 <script>
 let activeMarginPercent = null; // Global variable to store the active margin percentage
 
@@ -149,6 +184,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('tanggal').valueAsDate = new Date();
 
     document.getElementById('btnRefreshList').addEventListener('click', loadSalesList);
+
+    // Event listener untuk menutup modal jika diklik di luar area konten
+    window.addEventListener('click', (event) => {
+        const detailModal = document.getElementById('modalDetailPenjualan');
+        if (event.target == detailModal) {
+            closeDetailModal();
+        }
+    });
 });
 
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
@@ -346,9 +389,53 @@ document.getElementById('formPenjualan').addEventListener('submit', async (e) =>
     }
 });
 
-function viewSaleDetails(id) {
-    // Fungsi ini bisa dikembangkan lebih lanjut, misalnya membuka modal dengan detail item.
-    alert(`Fungsi untuk melihat detail transaksi TX-${id} belum diimplementasikan.`);
+async function viewSaleDetails(id) {
+    try {
+        const response = await fetch(`../models/penjualan.php?action=get_penjualan_details&id=${id}`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+            const penjualan = result.data;
+
+            // Isi data header modal
+            document.getElementById('detailModalTitle').textContent = `Detail Penjualan #${penjualan.idpenjualan}`;
+            document.getElementById('detailIdPenjualan').textContent = `TX-${penjualan.idpenjualan}`;
+            document.getElementById('detailPelanggan').textContent = penjualan.nama_pelanggan || 'Umum';
+            document.getElementById('detailTanggal').textContent = new Date(penjualan.created_at).toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
+            document.getElementById('detailUser').textContent = penjualan.username;
+
+            // Isi daftar barang
+            const detailBody = document.getElementById('detail-item-list-body');
+            detailBody.innerHTML = '';
+            let grandTotal = 0;
+            penjualan.details.forEach(item => {
+                grandTotal += parseFloat(item.subtotal);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.nama_barang}</td>
+                    <td style="text-align: right;">${item.jumlah}</td>
+                    <td style="text-align: right;">${formatRupiah(item.harga_satuan)}</td>
+                    <td style="text-align: right;">${formatRupiah(item.subtotal)}</td>
+                `;
+                detailBody.appendChild(row);
+            });
+
+            // Isi total keseluruhan
+            document.getElementById('detail-grand-total').textContent = formatRupiah(grandTotal);
+
+            // Tampilkan modal
+            document.getElementById('modalDetailPenjualan').classList.add('show');
+        } else {
+            alert('Gagal memuat detail penjualan: ' + (result.message || 'Data tidak ditemukan.'));
+        }
+    } catch (error) {
+        console.error('Error fetching sale details:', error);
+        alert('Terjadi kesalahan saat memuat detail.');
+    }
+}
+
+function closeDetailModal() {
+    document.getElementById('modalDetailPenjualan').classList.remove('show');
 }
 </script>
 

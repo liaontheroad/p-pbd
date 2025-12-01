@@ -418,24 +418,27 @@ if ($_SESSION['role_id'] != 1) {
 
                 if (result.success && result.data.length > 0) {
                     tableBody.innerHTML = result.data.map(log => {
-                        const tanggal = new Date(log.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+                        const tanggal = new Date(log.created_at).toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
                         let jenisTransaksi = '';
                         switch(log.jenis_transaksi) {
                             case 'M':
-                                jenisTransaksi = `Penerimaan (ID: ${log.id_transaksi})`;
+                                jenisTransaksi = `<span style='color: #28a745; font-weight: 500;'>Penerimaan (ID: ${log.id_transaksi})</span>`;
                                 break;
                             case 'K':
-                                jenisTransaksi = `Penjualan (ID: ${log.id_transaksi})`;
+                                jenisTransaksi = `<span style='color: #dc3545; font-weight: 500;'>Penjualan (ID: ${log.id_transaksi})</span>`;
+                                break;
+                            case 'A':
+                                jenisTransaksi = `<span style='color: #007bff; font-weight: 500;'>Penyesuaian (ID: ${log.id_transaksi})</span>`;
                                 break;
                             default:
-                                jenisTransaksi = 'Lainnya';
+                                jenisTransaksi = 'Stok Awal';
                         }
                         return `
                             <tr>
                                 <td>${tanggal}</td>
                                 <td>${jenisTransaksi}</td>
-                                <td style="text-align: right; color: #50fa7b;">${log.masuk > 0 ? `+${log.masuk}` : '0'}</td>
-                                <td style="text-align: right; color: #f5576c;">${log.keluar > 0 ? `-${log.keluar}` : '0'}</td>
+                                <td style="text-align: right; color: #28a745; font-weight: 500;">${log.masuk > 0 ? `+${log.masuk}` : '0'}</td>
+                                <td style="text-align: right; color: #dc3545; font-weight: 500;">${log.keluar > 0 ? `-${log.keluar}` : '0'}</td>
                                 <td style="text-align: right; font-weight: bold;">${log.stok}</td>
                             </tr>
                         `;
